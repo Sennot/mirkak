@@ -24,6 +24,7 @@ namespace layoutfeed::settings {
             bool hideParticles = true;
             bool hideMiddleground = true;
             bool disableShaders = true;
+            bool alwaysShowPlayer = true;
             ccColor3B objectColor{255, 255, 255};
             ccColor3B detailColor{0, 0, 0};
             ccColor3B backgroundColor{40, 125, 255};
@@ -56,6 +57,7 @@ namespace layoutfeed::settings {
             value.hideParticles = mod->getSettingValue<bool>("layout-hide-particles");
             value.hideMiddleground = mod->getSettingValue<bool>("layout-hide-middleground");
             value.disableShaders = mod->getSettingValue<bool>("layout-disable-shaders");
+            value.alwaysShowPlayer = mod->getSettingValue<bool>("layout-always-show-player");
             value.objectColor = mod->getSettingValue<ccColor3B>("layout-object-color");
             value.detailColor = mod->getSettingValue<ccColor3B>("layout-detail-color");
             value.backgroundColor = mod->getSettingValue<ccColor3B>("layout-background-color");
@@ -103,6 +105,7 @@ namespace layoutfeed::settings {
     bool hideParticles() { return cache().hideParticles; }
     bool hideMiddleground() { return cache().hideMiddleground; }
     bool disableShaders() { return cache().disableShaders; }
+    bool alwaysShowPlayer() { return cache().alwaysShowPlayer; }
     ccColor3B objectColor() { return cache().objectColor; }
     ccColor3B detailColor() { return cache().detailColor; }
     ccColor3B backgroundColor() { return cache().backgroundColor; }
@@ -122,12 +125,12 @@ namespace layoutfeed::settings {
         auto const& value = cache();
         log::info(
             "Settings: spout={} sender='{}' cursor={} menus={} steam={} | layout={} deco={} recolor={} opacity={} "
-            "blending={} glow={} particles={} mg={} shaders={} | debug={} interval={}s gpuTimers={}",
+            "blending={} glow={} particles={} mg={} shaders={} player={} | debug={} interval={}s gpuTimers={}",
             value.enabled, value.senderName, value.captureCursor, value.captureMenus,
             value.captureSystemOverlays,
             value.layoutEnabled, value.hideDecoration, value.recolorObjects, value.forceOpacity,
             value.normalBlending, value.hideGlow, value.hideParticles, value.hideMiddleground,
-            value.disableShaders, value.debugLogging, value.statsInterval, value.gpuTimers
+            value.disableShaders, value.alwaysShowPlayer, value.debugLogging, value.statsInterval, value.gpuTimers
         );
     }
 }

@@ -62,6 +62,7 @@ Geode-мод для Geometry Dash 2.2081 (Windows, Geode 5.8.2).
 | Disable additive blending | вкл | Объекты на blending-каналах рисуются обычным смешиванием |
 | Hide glow / particles / middleground | вкл | Свечение, частицы, средний план |
 | Disable shaders | вкл | Шейдер-триггеры только на экране |
+| Always show player | вкл | Иконка игрока видна на экране даже под Hide Player триггерами и fade; в OBS как задумано в уровне |
 | Цвета | как в GDH | Объект, деталь, фон, земля, линия |
 | Debug logging | выкл | Подробные логи, см. ниже |
 

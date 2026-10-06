@@ -5,7 +5,7 @@
   },
   "id": "halil.spout2-layout-feed",
   "name": "Spout2 Layout Feed",
-  "version": "v1.4.0",
+  "version": "v1.5.0",
   "developer": "halil",
   "description": "Plays levels in Layout Mode on your screen while OBS receives the normal, fully decorated level through Spout2.",
   "tags": ["gameplay", "utility"],
@@ -113,6 +113,13 @@
       "type": "bool",
       "name": "Disable shaders",
       "description": "Skips 2.2 shader triggers (glitch, chromatic, blur, shockwave, ...) on your screen only.",
+      "default": true,
+      "enable-if": "layout-enabled"
+    },
+    "layout-always-show-player": {
+      "type": "bool",
+      "name": "Always show player",
+      "description": "Keeps your icon visible on your screen when Hide Player triggers or fades hide it. OBS still shows the level as designed.",
       "default": true,
       "enable-if": "layout-enabled"
     },

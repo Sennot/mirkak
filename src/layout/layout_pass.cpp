@@ -99,6 +99,11 @@ namespace layoutfeed::pass {
                     tintSubtree(groundLayer->m_lineSprite, line, m_colors);
                 }
 
+                if (settings::alwaysShowPlayer() && !layer->m_levelEndAnimationStarted) {
+                    revealPlayer(layer->m_player1);
+                    if (layer->m_gameState.m_isDualMode) revealPlayer(layer->m_player2);
+                }
+
                 if (settings::disableShaders()) {
                     if (auto* shaderLayer = layer->m_shaderLayer) {
                         m_shaderLayer = shaderLayer;
@@ -110,6 +115,12 @@ namespace layoutfeed::pass {
 
             ~PassScope() {
                 if (m_shaderLayer) m_shaderLayer->m_state.m_usesShaders = m_usesShaders;
+                for (auto it = m_players.rbegin(); it != m_players.rend(); ++it) {
+                    auto& saved = *it;
+                    if (saved.opacity != 255) saved.player->setOpacity(saved.opacity);
+                    if (saved.mainLayer) saved.mainLayer->setVisible(saved.mainLayerVisible);
+                    saved.player->CCSprite::setVisible(saved.visible);
+                }
                 for (auto it = m_colors.rbegin(); it != m_colors.rend(); ++it) {
                     it->first->setColor(it->second);
                 }
@@ -132,6 +143,36 @@ namespace layoutfeed::pass {
             ShaderLayer* m_shaderLayer = nullptr;
             bool m_usesShaders = false;
             std::vector<std::pair<Ref<CCSprite>, ccColor3B>> m_colors;
+
+            struct SavedPlayer {
+                PlayerObject* player = nullptr;
+                CCNode* mainLayer = nullptr;
+                bool visible = true;
+                bool mainLayerVisible = true;
+                GLubyte opacity = 255;
+            };
+            std::vector<SavedPlayer> m_players;
+
+            // Hide Player triggers (toggleVisibility) and player fades hide
+            // the icon from the level; on the monitor it stays visible. The
+            // base CCSprite::setVisible is used so PlayerObject's override
+            // (trails, particles) never runs for this temporary change. A dead
+            // player keeps its death effect.
+            void revealPlayer(PlayerObject* player) {
+                if (!player || player->m_isDead) return;
+                SavedPlayer saved;
+                saved.player = player;
+                saved.visible = player->isVisible();
+                saved.mainLayer = player->m_mainLayer;
+                saved.mainLayerVisible = saved.mainLayer ? saved.mainLayer->isVisible() : true;
+                saved.opacity = player->getOpacity();
+                if (saved.visible && saved.mainLayerVisible && saved.opacity == 255) return;
+
+                player->CCSprite::setVisible(true);
+                if (saved.mainLayer) saved.mainLayer->setVisible(true);
+                if (saved.opacity != 255) player->setOpacity(255);
+                m_players.push_back(saved);
+            }
         };
     }
 

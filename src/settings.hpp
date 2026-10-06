@@ -23,6 +23,7 @@ namespace layoutfeed::settings {
     bool hideParticles();
     bool hideMiddleground();
     bool disableShaders();
+    bool alwaysShowPlayer();
     cocos2d::ccColor3B objectColor();
     cocos2d::ccColor3B detailColor();
     cocos2d::ccColor3B backgroundColor();
