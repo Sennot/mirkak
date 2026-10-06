@@ -140,7 +140,8 @@ namespace layoutfeed::roles {
                 case Origin::Detail:
                     return static_cast<GameObject const*>(entry.ref)->m_colorSprite == node;
                 case Origin::Lazy:
-                    return node->getParent() == entry.ref;
+                    // cocos2d's getParent() is not const-qualified.
+                    return const_cast<CCNode*>(node)->getParent() == entry.ref;
             }
             return false;
         }
