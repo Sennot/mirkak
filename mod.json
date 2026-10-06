@@ -1,0 +1,161 @@
+{
+  "geode": "5.8.2",
+  "gd": {
+    "win": "2.2081"
+  },
+  "id": "halil.spout2-layout-feed",
+  "name": "Spout2 Layout Feed",
+  "version": "v1.0.0",
+  "developer": "halil",
+  "description": "Plays levels in Layout Mode on your screen while OBS receives the normal, fully decorated level through Spout2.",
+  "tags": ["gameplay", "utility"],
+  "settings": {
+    "spout-title": {
+      "type": "title",
+      "name": "Spout2 (OBS feed)"
+    },
+    "enabled": {
+      "type": "bool",
+      "name": "Enable Spout2 sender",
+      "description": "Sends the normal game picture (menus, levels, shaders, all 2.2 effects) to OBS. The frame is shared GPU-to-GPU when the driver supports it.",
+      "default": true
+    },
+    "sender-name": {
+      "type": "string",
+      "name": "Sender name",
+      "default": "Geometry Dash",
+      "enable-if": "enabled"
+    },
+    "capture-cursor": {
+      "type": "bool",
+      "name": "Capture cursor",
+      "description": "Draws the Windows cursor into the Spout2 feed only.",
+      "default": true,
+      "enable-if": "enabled"
+    },
+    "layout-title": {
+      "type": "title",
+      "name": "Layout Mode (your screen only)"
+    },
+    "layout-enabled": {
+      "type": "bool",
+      "name": "Enable Layout Mode",
+      "description": "Redraws the level on your screen without decoration, colors and shaders. The Spout2 feed always shows the normal level. The level itself is never modified, so triggers, shaders and camera effects keep working.",
+      "default": true
+    },
+    "layout-keybind": {
+      "type": "keybind",
+      "name": "Toggle Layout Mode",
+      "default": "F6",
+      "category": "universal"
+    },
+    "layout-hide-decoration": {
+      "type": "bool",
+      "name": "Hide decoration",
+      "description": "Hides decoration and no-touch objects.",
+      "default": true,
+      "enable-if": "layout-enabled"
+    },
+    "layout-recolor-objects": {
+      "type": "bool",
+      "name": "Remove object colors",
+      "description": "Draws gameplay objects with the fixed colors below instead of their color channels, pulses and HSV.",
+      "default": true,
+      "enable-if": "layout-enabled"
+    },
+    "layout-force-opacity": {
+      "type": "bool",
+      "name": "Show invisible objects",
+      "description": "Ignores alpha triggers and fades, like Layout Mode with alpha triggers removed.",
+      "default": true,
+      "enable-if": "layout-enabled"
+    },
+    "layout-normal-blending": {
+      "type": "bool",
+      "name": "Disable additive blending",
+      "description": "Draws objects on blending color channels with normal blending so they stay visible.",
+      "default": true,
+      "enable-if": "layout-enabled"
+    },
+    "layout-hide-glow": {
+      "type": "bool",
+      "name": "Hide glow",
+      "default": true,
+      "enable-if": "layout-enabled"
+    },
+    "layout-hide-particles": {
+      "type": "bool",
+      "name": "Hide particles",
+      "default": true,
+      "enable-if": "layout-enabled"
+    },
+    "layout-hide-middleground": {
+      "type": "bool",
+      "name": "Hide middleground",
+      "default": true,
+      "enable-if": "layout-enabled"
+    },
+    "layout-disable-shaders": {
+      "type": "bool",
+      "name": "Disable shaders",
+      "description": "Skips 2.2 shader triggers (glitch, chromatic, blur, shockwave, ...) on your screen only.",
+      "default": true,
+      "enable-if": "layout-enabled"
+    },
+    "layout-object-color": {
+      "type": "rgb",
+      "name": "Object color",
+      "default": [255, 255, 255],
+      "enable-if": "layout-enabled"
+    },
+    "layout-detail-color": {
+      "type": "rgb",
+      "name": "Object detail color",
+      "default": [0, 0, 0],
+      "enable-if": "layout-enabled"
+    },
+    "layout-background-color": {
+      "type": "rgb",
+      "name": "Background color",
+      "default": [40, 125, 255],
+      "enable-if": "layout-enabled"
+    },
+    "layout-ground-color": {
+      "type": "rgb",
+      "name": "Ground color",
+      "default": [0, 102, 255],
+      "enable-if": "layout-enabled"
+    },
+    "layout-line-color": {
+      "type": "rgb",
+      "name": "Ground line color",
+      "default": [255, 255, 255],
+      "enable-if": "layout-enabled"
+    },
+    "debug-title": {
+      "type": "title",
+      "name": "Debug"
+    },
+    "debug-logging": {
+      "type": "bool",
+      "name": "Debug logging",
+      "description": "Writes detailed diagnostics to the Geode log: OpenGL driver info, Spout2 share mode, per-level object statistics, OpenGL errors and periodic CPU/GPU timings.",
+      "default": false
+    },
+    "debug-stats-interval": {
+      "type": "int",
+      "name": "Statistics interval (seconds)",
+      "default": 5,
+      "min": 1,
+      "max": 60,
+      "enable-if": "debug-logging"
+    },
+    "debug-gpu-timers": {
+      "type": "bool",
+      "name": "Measure GPU time",
+      "description": "Uses asynchronous OpenGL timer queries; they never stall the frame.",
+      "default": true,
+      "enable-if": "debug-logging"
+    }
+  }
+}

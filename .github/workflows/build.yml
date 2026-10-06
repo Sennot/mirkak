@@ -1,0 +1,36 @@
+name: Build Windows
+
+on:
+  workflow_dispatch:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Win64 mod
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out sources
+        uses: actions/checkout@v6
+
+      - name: Build Geode mod
+        id: build
+        uses: geode-sdk/build-geode-mod@main
+        with:
+          # Keep CI aligned with mod.json and the loader version this mod targets.
+          sdk: 5.8.2
+          target: Win64
+          build-config: RelWithDebInfo
+          export-pdb: true
+          use-lto: true
+
+      - name: Upload package and symbols
+        uses: actions/upload-artifact@v7
+        with:
+          name: Spout2LayoutFeed-Windows
+          path: ${{ steps.build.outputs.build-output }}
+          if-no-files-found: error
