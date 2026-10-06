@@ -67,7 +67,12 @@ namespace layoutfeed::debug {
     };
 
     // Logs every pending OpenGL error once per call site (rate limited).
+    // Debug only: without debug logging nothing is queried.
     void checkGL(char const* where);
+
+    // Always clears pending OpenGL errors (logging them in debug mode), so
+    // mods that draw after this mod, such as Mega Hack, never inherit one.
+    void drainGL(char const* where);
 
     // Called once per presented frame. Emits the statistics line when the
     // configured interval has elapsed.

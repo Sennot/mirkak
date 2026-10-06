@@ -216,10 +216,16 @@ void main() {
             glUniform3f(location, color.r / 255.f, color.g / 255.f, color.b / 255.f);
         }
 
-        // Binds a role texture on unit 1 through the cocos2d state cache and
-        // returns to unit 0, which cocos2d assumes is active.
+        // Binds a role texture on unit 1 and returns to unit 0, which cocos2d
+        // assumes is active. The cocos2d cache is updated first and the bind
+        // is then issued unconditionally: other code (2.2 shaders, overlays)
+        // binds unit 1 behind the cache's back, and trusting a stale cache
+        // made uploads hit the wrong texture (GL_INVALID_VALUE) and made the
+        // shader read wrong roles, so objects vanished at random.
         void bindFlags(GLuint texture) {
             ccGLBindTexture2DN(1, texture);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, texture);
             glActiveTexture(GL_TEXTURE0);
         }
 
@@ -237,7 +243,8 @@ void main() {
             if (!cache.texture) glGenTextures(1, &cache.texture);
             if (!cache.texture) return false;
 
-            ccGLBindTexture2DN(1, cache.texture);
+            bindFlags(cache.texture);
+            glActiveTexture(GL_TEXTURE1);
             // texelFetch needs a complete texture: no mipmaps, nearest filter.
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
             glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
@@ -295,12 +302,22 @@ void main() {
             cache.rolesGeneration = rolesGeneration;
             cache.settingsGeneration = settingsGeneration;
 
+            // Client-memory upload: no pixel unpack buffer, tight rows.
             GLint alignment = 4;
+            GLint rowLength = 0;
+            GLint unpackBuffer = 0;
             glGetIntegerv(GL_UNPACK_ALIGNMENT, &alignment);
+            glGetIntegerv(GL_UNPACK_ROW_LENGTH, &rowLength);
+            glGetIntegerv(GL_PIXEL_UNPACK_BUFFER_BINDING, &unpackBuffer);
             glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-            ccGLBindTexture2DN(1, cache.texture);
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, 0);
+            if (unpackBuffer) glBindBuffer(GL_PIXEL_UNPACK_BUFFER, 0);
+            bindFlags(cache.texture);
+            glActiveTexture(GL_TEXTURE1);
             glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, kFlagsWidth, rows, GL_RED, GL_UNSIGNED_BYTE, cache.flags.data());
             glActiveTexture(GL_TEXTURE0);
+            if (unpackBuffer) glBindBuffer(GL_PIXEL_UNPACK_BUFFER, static_cast<GLuint>(unpackBuffer));
+            glPixelStorei(GL_UNPACK_ROW_LENGTH, rowLength);
             glPixelStorei(GL_UNPACK_ALIGNMENT, alignment);
 
             ++debug::counters().flagRebuilds;
@@ -393,6 +410,7 @@ void main() {
         // Vertex colors are final (premultiplied, opaque): role "keep".
         glUniform1i(s_uniforms.roleOverride, 0);
         ccGLBindTexture2D(texture->getName());
+        glBindTexture(GL_TEXTURE_2D, texture->getName());
         ccGLBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
 
         if (!s_revealBuffer) glGenBuffers(1, &s_revealBuffer);

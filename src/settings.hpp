@@ -11,6 +11,7 @@ namespace layoutfeed::settings {
     std::string const& senderName();
     bool captureCursor();
     bool captureMenus();
+    bool captureSystemOverlays();
 
     // Layout Mode
     bool layoutEnabled();

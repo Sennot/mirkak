@@ -10,7 +10,7 @@
 ## Spout2 Clean Feed (reference)
 
 - The user's earlier mod, supplied in `reference/`. The Spout2 sender, the swapBuffers hook ordering
-  around Mega Hack and the visible-section traversal (itself informed by Eclipse Menu, EPL-2.0) come
+  around Mega Hack, the OpenGL driver present hook (`src/present_hook.cpp`) and the visible-section traversal (itself informed by Eclipse Menu, EPL-2.0) come
   from it.
 
 ## GDH (reference only)

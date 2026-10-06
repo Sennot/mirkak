@@ -5,7 +5,7 @@
   },
   "id": "halil.spout2-layout-feed",
   "name": "Spout2 Layout Feed",
-  "version": "v1.1.0",
+  "version": "v1.2.0",
   "developer": "halil",
   "description": "Plays levels in Layout Mode on your screen while OBS receives the normal, fully decorated level through Spout2.",
   "tags": ["gameplay", "utility"],
@@ -38,6 +38,13 @@
       "name": "Show mod menus in OBS",
       "description": "Includes Mega Hack and other menus drawn in swapBuffers in the Spout2 feed, like the clean-feed mod. With Layout Mode on, the menus are composited on the GPU into both the feed and your screen.",
       "default": true,
+      "enable-if": "enabled"
+    },
+    "capture-system-overlays": {
+      "type": "bool",
+      "name": "Include Steam overlay (experimental)",
+      "description": "Captures the frame at the OpenGL driver's present, after in-process overlays such as the Steam overlay, RivaTuner and Discord's legacy in-game overlay have drawn, so OBS shows them too. Overlays in their own window (current Discord overlay, NVIDIA app, Xbox Game Bar) cannot be captured. Falls back to normal capture automatically if the driver hook is not reached.",
+      "default": false,
       "enable-if": "enabled"
     },
     "layout-title": {

@@ -52,6 +52,7 @@ Geode-мод для Geometry Dash 2.2081 (Windows, Geode 5.8.2).
 | Sender name | `Geometry Dash` | Имя источника в OBS (Spout2 Capture) |
 | Capture cursor | вкл | Курсор только в Spout2 |
 | Show mod menus in OBS | вкл | Mega Hack и другие меню видны и в OBS, и на экране |
+| Include Steam overlay (experimental) | выкл | Захват на present драйвера OpenGL, после Steam/RivaTuner/старого Discord-оверлея (как в clean-feed моде). Если хук драйвера не срабатывает, мод сам возвращается к обычному захвату |
 | Enable Layout Mode | вкл | Layout Mode на экране. Переключается клавишей **F6** |
 | Hide decoration | вкл | Скрывает декорации и no-touch объекты (тот же список ID, что в GDH) |
 | Remove object colors | вкл | Объекты рисуются цветами ниже вместо цветовых каналов |

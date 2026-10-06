@@ -6,6 +6,7 @@
 #include "debug.hpp"
 #include "layout/layout_pass.hpp"
 #include "overlay_capture.hpp"
+#include "present_hook.hpp"
 #include "settings.hpp"
 #include "spout/spout_sender.hpp"
 
@@ -42,6 +43,8 @@ namespace layoutfeed {
 
             if (settings::captureMenus() && overlay::begin(&pass::render)) {
                 s_mode = FrameMode::Redirected;
+                // Menus drawing next must not see an error from this mod.
+                debug::drainGL("layout pass");
                 return;
             }
 
@@ -50,10 +53,12 @@ namespace layoutfeed {
             captureSpout();
             debug::checkGL("spout::capture");
             pass::render();
+            debug::drainGL("layout pass");
         }
 
-        // Runs after the menus have drawn, right before the real swap.
-        void afterMenus() {
+        // Finishes the frame: after the menus, or, with the Steam overlay
+        // option, at the OpenGL driver present after in-process overlays.
+        void completeFrame() {
             switch (s_mode) {
                 case FrameMode::Redirected:
                     overlay::finish();
@@ -66,7 +71,12 @@ namespace layoutfeed {
                     break;
             }
             s_mode = FrameMode::Plain;
+            debug::drainGL("frame end");
             debug::endFrame();
+        }
+
+        void afterMenus() {
+            if (!present_hook::deferFrame(&completeFrame)) completeFrame();
         }
     }
 

@@ -141,6 +141,14 @@ namespace layoutfeed::debug {
         s_gpuActive = false;
     }
 
+    void drainGL(char const* where) {
+        if (settings::debugLogging()) {
+            checkGL(where);
+            return;
+        }
+        for (int guard = 0; guard < 16 && glGetError() != GL_NO_ERROR; ++guard) {}
+    }
+
     void checkGL(char const* where) {
         if (!settings::debugLogging()) return;
         for (int guard = 0; guard < 16; ++guard) {

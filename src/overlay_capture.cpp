@@ -34,6 +34,9 @@ void main() {
         struct Target {
             GLuint fbo = 0;
             GLuint texture = 0;
+            // Depth and stencil like the default framebuffer: menu renderers
+            // may clip with the stencil buffer or use depth testing.
+            GLuint depthStencil = 0;
         };
 
         enum class State { Untried, Ready, Failed };
@@ -95,6 +98,7 @@ void main() {
         void release(Target& target) {
             if (target.fbo) glDeleteFramebuffers(1, &target.fbo);
             if (target.texture) glDeleteTextures(1, &target.texture);
+            if (target.depthStencil) glDeleteRenderbuffers(1, &target.depthStencil);
             target = {};
         }
 
@@ -116,6 +120,13 @@ void main() {
             glGenFramebuffers(1, &target.fbo);
             glBindFramebuffer(GL_DRAW_FRAMEBUFFER, target.fbo);
             glFramebufferTexture2D(GL_DRAW_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, target.texture, 0);
+            GLint renderbuffer = 0;
+            glGetIntegerv(GL_RENDERBUFFER_BINDING, &renderbuffer);
+            glGenRenderbuffers(1, &target.depthStencil);
+            glBindRenderbuffer(GL_RENDERBUFFER, target.depthStencil);
+            glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
+            glBindRenderbuffer(GL_RENDERBUFFER, static_cast<GLuint>(renderbuffer));
+            glFramebufferRenderbuffer(GL_DRAW_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, target.depthStencil);
             glDrawBuffer(GL_COLOR_ATTACHMENT0);
             auto const complete = glCheckFramebufferStatus(GL_DRAW_FRAMEBUFFER) == GL_FRAMEBUFFER_COMPLETE;
             glBindFramebuffer(GL_DRAW_FRAMEBUFFER, static_cast<GLuint>(drawFbo));
@@ -235,9 +246,17 @@ void main() {
         glGetFloatv(GL_COLOR_CLEAR_VALUE, clear);
         auto const scissor = glIsEnabled(GL_SCISSOR_TEST);
         if (scissor) glDisable(GL_SCISSOR_TEST);
+        GLint stencilMask = 0;
+        GLboolean depthMask = GL_TRUE;
+        glGetIntegerv(GL_STENCIL_WRITEMASK, &stencilMask);
+        glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMask);
         glBindFramebuffer(GL_FRAMEBUFFER, s_overlay.fbo);
         glClearColor(0.f, 0.f, 0.f, 0.f);
-        glClear(GL_COLOR_BUFFER_BIT);
+        glStencilMask(0xFF);
+        glDepthMask(GL_TRUE);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        glDepthMask(depthMask);
+        glStencilMask(static_cast<GLuint>(stencilMask));
         glClearColor(clear[0], clear[1], clear[2], clear[3]);
         if (scissor) glEnable(GL_SCISSOR_TEST);
 
