@@ -27,7 +27,11 @@ void main() {
 in vec2 v_texCoord;
 uniform sampler2D u_overlay;
 void main() {
-    gl_FragColor = texture(u_overlay, v_texCoord);
+    vec4 color = texture(u_overlay, v_texCoord);
+    // Premultiplied color can never exceed its alpha. Overlays that mask
+    // alpha writes leave alpha at 0; their color then defines coverage.
+    color.a = max(color.a, max(color.r, max(color.g, color.b)));
+    gl_FragColor = color;
 }
 )";
 
@@ -45,10 +49,21 @@ void main() {
         GLuint s_program = 0;
         GLint s_overlayUniform = -1;
         Target s_normal;  // copy of the normal frame (what OBS sees)
-        Target s_overlay; // transparent target the mod menus draw on
+        Target s_layout;  // layout frame (what the monitor sees)
+        Target s_overlay; // everything the menus and overlays drew
         GLsizei s_width = 0;
         GLsizei s_height = 0;
         bool s_redirecting = false;
+
+        // How menus are separated from the game picture:
+        //   DefaultAlpha: the window's own back buffer is cleared to
+        //     transparent and the menus draw on it. This also catches menus
+        //     and the Steam overlay that bind the default framebuffer
+        //     themselves (they never reached an offscreen target).
+        //   Offscreen: the back buffer has no alpha channel, so a
+        //     transparent offscreen target is bound instead.
+        enum class Method { Unknown, DefaultAlpha, Offscreen };
+        Method s_method = Method::Unknown;
 
         GLuint compile(GLenum type, char const* source) {
             auto const shader = glCreateShader(type);
@@ -146,9 +161,11 @@ void main() {
                     return false;
                 }
             }
-            if (s_normal.fbo && s_overlay.fbo && s_width == width && s_height == height) return true;
-            if (!create(s_normal, width, height) || !create(s_overlay, width, height)) {
+            if (s_normal.fbo && s_layout.fbo && s_overlay.fbo && s_width == width && s_height == height) return true;
+            if (!create(s_normal, width, height) || !create(s_layout, width, height) ||
+                !create(s_overlay, width, height)) {
                 release(s_normal);
+                release(s_layout);
                 release(s_overlay);
                 s_width = s_height = 0;
                 return false;
@@ -231,33 +248,54 @@ void main() {
         auto const height = viewport[3];
         if (width <= 0 || height <= 0 || !ensureTargets(width, height)) return false;
 
+        if (s_method == Method::Unknown) {
+            GLint alphaBits = 0;
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glGetIntegerv(GL_ALPHA_BITS, &alphaBits);
+            s_method = alphaBits >= 8 ? Method::DefaultAlpha : Method::Offscreen;
+            log::info(
+                "Overlay capture method: {} (back buffer alpha bits {})",
+                s_method == Method::DefaultAlpha ? "window back buffer" : "offscreen target", alphaBits
+            );
+        }
+
         // 1. Keep the normal frame for OBS (GPU blit, no CPU copy).
         glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
         glReadBuffer(GL_BACK);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, s_normal.fbo);
         glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
-        // 2. The monitor gets the layout version.
+        // 2. Draw the layout version: offscreen when the back buffer is about
+        //    to become the menus' canvas, otherwise straight onto it.
+        glBindFramebuffer(GL_FRAMEBUFFER, s_method == Method::DefaultAlpha ? s_layout.fbo : 0);
         renderLayout();
 
-        // 3. Everything drawn until finish() lands on a transparent target.
+        // 3. Give the menus a transparent canvas.
         GLfloat clear[4]{};
+        GLboolean colorMask[4]{};
         glGetFloatv(GL_COLOR_CLEAR_VALUE, clear);
+        glGetBooleanv(GL_COLOR_WRITEMASK, colorMask);
         auto const scissor = glIsEnabled(GL_SCISSOR_TEST);
         if (scissor) glDisable(GL_SCISSOR_TEST);
         GLint stencilMask = 0;
         GLboolean depthMask = GL_TRUE;
         glGetIntegerv(GL_STENCIL_WRITEMASK, &stencilMask);
         glGetBooleanv(GL_DEPTH_WRITEMASK, &depthMask);
-        glBindFramebuffer(GL_FRAMEBUFFER, s_overlay.fbo);
-        glClearColor(0.f, 0.f, 0.f, 0.f);
+        if (s_method == Method::DefaultAlpha) {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glDrawBuffer(GL_BACK);
+        } else {
+            glBindFramebuffer(GL_FRAMEBUFFER, s_overlay.fbo);
+        }
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
         glStencilMask(0xFF);
         glDepthMask(GL_TRUE);
+        glClearColor(0.f, 0.f, 0.f, 0.f);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        glClearColor(clear[0], clear[1], clear[2], clear[3]);
         glDepthMask(depthMask);
         glStencilMask(static_cast<GLuint>(stencilMask));
-        glClearColor(clear[0], clear[1], clear[2], clear[3]);
+        glColorMask(colorMask[0], colorMask[1], colorMask[2], colorMask[3]);
         if (scissor) glEnable(GL_SCISSOR_TEST);
 
         s_redirecting = true;
@@ -269,12 +307,28 @@ void main() {
         if (!s_redirecting) return;
         s_redirecting = false;
 
-        GLint drawFbo = 0;
-        glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawFbo);
-        if (static_cast<GLuint>(drawFbo) != s_overlay.fbo) {
-            // A menu rebound the default framebuffer itself; whatever it drew
-            // is already on the monitor only.
-            LF_DEBUG("Overlay capture: draw framebuffer changed to {} before finish", drawFbo);
+        if (s_method == Method::DefaultAlpha) {
+            // The back buffer holds only what menus and overlays drew, with
+            // their coverage in alpha. Lift it out, then put the layout frame
+            // back on the monitor.
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+            glReadBuffer(GL_BACK);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, s_overlay.fbo);
+            glBlitFramebuffer(0, 0, s_width, s_height, 0, 0, s_width, s_height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, s_layout.fbo);
+            glReadBuffer(GL_COLOR_ATTACHMENT0);
+            glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+            glDrawBuffer(GL_BACK);
+            glBlitFramebuffer(0, 0, s_width, s_height, 0, 0, s_width, s_height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+        } else {
+            GLint drawFbo = 0;
+            glGetIntegerv(GL_DRAW_FRAMEBUFFER_BINDING, &drawFbo);
+            if (static_cast<GLuint>(drawFbo) != s_overlay.fbo) {
+                // A menu rebound the default framebuffer itself; whatever it
+                // drew is already on the monitor only.
+                LF_DEBUG("Overlay capture: draw framebuffer changed to {} before finish", drawFbo);
+            }
         }
 
         // Monitor: layout + menus.
@@ -305,6 +359,14 @@ void main() {
         s_redirecting = false;
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glDrawBuffer(GL_BACK);
+        if (s_method == Method::DefaultAlpha) {
+            // Never leave the transparent canvas on screen.
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, s_layout.fbo);
+            glReadBuffer(GL_COLOR_ATTACHMENT0);
+            glBlitFramebuffer(0, 0, s_width, s_height, 0, 0, s_width, s_height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+            glBindFramebuffer(GL_READ_FRAMEBUFFER, 0);
+            glReadBuffer(GL_BACK);
+        }
         log::warn("Overlay capture: the previous frame was never presented (detected at {}); redirect reset", where);
     }
 }
