@@ -1,0 +1,216 @@
+{
+  "geode": "5.8.2",
+  "gd": {
+    "win": "2.2081"
+  },
+  "id": "halil.spout2-clean-feed",
+  "name": "Spout2 Clean Feed",
+  "version": "v1.7.0",
+  "developer": "halil",
+  "description": "Sends a clean Geometry Dash level feed to OBS through Spout2 while hitboxes and trajectories remain visible only in-game.",
+  "tags": ["gameplay", "utility"],
+  "settings": {
+    "sender-title": {
+      "type": "title",
+      "name": "Spout2"
+    },
+    "enabled": {
+      "type": "bool",
+      "name": "Enable clean feed",
+      "description": "Keeps the Spout2 sender active in menus, levels and the editor.",
+      "default": true
+    },
+    "sender-name": {
+      "type": "string",
+      "name": "Sender name",
+      "default": "Geometry Dash Clean Feed",
+      "enable-if": "enabled"
+    },
+    "capture-cursor": {
+      "type": "bool",
+      "name": "Capture cursor",
+      "description": "Draws the Windows cursor into the Spout2 feed without duplicating it in the game window.",
+      "default": true,
+      "enable-if": "enabled"
+    },
+    "capture-system-overlays": {
+      "type": "bool",
+      "name": "Include Steam/system overlays (experimental)",
+      "description": "Captures the frame after in-process overlays such as the Steam overlay, RivaTuner and Discord's legacy in-game overlay have drawn, so OBS shows them too. Hitboxes, trajectory and hidden xDBot UI are then drawn on top of those overlays on your screen. Overlays that run in their own window (Discord's current overlay, NVIDIA app, Xbox Game Bar) are not part of the game frame and cannot be captured. Falls back to normal capture automatically if your graphics driver is not supported.",
+      "default": false,
+      "enable-if": "enabled"
+    },
+    "hide-xdbot-ui": {
+      "type": "bool",
+      "name": "Hide xDBot UI in Spout",
+      "description": "Keeps xDBot's named HUD, buttons and custom menus on your screen while excluding them from Spout. Does not disable xDBot or change macro playback. Generic Geode dialogs and gameplay visual modifications are not filtered.",
+      "default": true,
+      "enable-if": "enabled"
+    },
+    "overlay-title": {
+      "type": "title",
+      "name": "Player-only overlays"
+    },
+    "smart-contrast": {
+      "type": "button",
+      "name": "Smart Contrast",
+      "description": "Analyzes a locally saved level once and generates three high-visibility color palettes. The analyzer uses no CPU after it finishes.",
+      "buttons": {
+        "analyze": "Analyze"
+      }
+    },
+    "show-hitboxes": {
+      "type": "bool",
+      "name": "Show hitboxes",
+      "default": true
+    },
+    "show-trajectory": {
+      "type": "bool",
+      "name": "Show trajectory",
+      "default": true
+    },
+    "keybind-title": {
+      "type": "title",
+      "name": "Keybinds"
+    },
+    "toggle-hitboxes-keybind": {
+      "type": "keybind",
+      "name": "Toggle hitboxes",
+      "description": "Toggles the hitbox overlay in a level or editor, including during the death delay and pause.",
+      "default": "F3",
+      "category": "universal"
+    },
+    "toggle-trajectory-keybind": {
+      "type": "keybind",
+      "name": "Toggle trajectory",
+      "description": "Toggles the trajectory overlay in a level or editor, including during the death delay and pause.",
+      "default": "F4",
+      "category": "universal"
+    },
+    "trajectory-length": {
+      "type": "float",
+      "name": "Trajectory length (seconds)",
+      "default": 2.0,
+      "min": 0.1,
+      "max": 5.0,
+      "control": {
+        "slider": true,
+        "slider-step": 0.1,
+        "input": true
+      },
+      "enable-if": "show-trajectory"
+    },
+    "high-performance-trajectory": {
+      "type": "bool",
+      "name": "High-performance trajectory",
+      "description": "Reuses prediction snapshots and their container memory between frames. Disable this to use the v1.4.2 allocation path for troubleshooting.",
+      "default": true,
+      "enable-if": "show-trajectory"
+    },
+    "trajectory-tps": {
+      "type": "int",
+      "name": "Trajectory simulation TPS",
+      "description": "240 is accurate and usually fast enough. Higher values cost more CPU.",
+      "default": 240,
+      "min": 60,
+      "max": 1000,
+      "control": {
+        "slider": true,
+        "slider-step": 60,
+        "input": true
+      },
+      "enable-if": "show-trajectory"
+    },
+    "trajectory-width": {
+      "type": "float",
+      "name": "Trajectory line width",
+      "default": 0.65,
+      "min": 0.1,
+      "max": 5.0,
+      "control": {
+        "slider": true,
+        "slider-step": 0.05,
+        "input": true
+      },
+      "enable-if": "show-trajectory"
+    },
+    "trajectory-hold-color": {
+      "type": "rgba",
+      "name": "Hold trajectory color",
+      "default": [0, 255, 26, 255],
+      "enable-if": "show-trajectory"
+    },
+    "trajectory-release-color": {
+      "type": "rgba",
+      "name": "Release trajectory color",
+      "default": [255, 0, 26, 255],
+      "enable-if": "show-trajectory"
+    },
+    "hitbox-title": {
+      "type": "title",
+      "name": "Hitbox style"
+    },
+    "hitbox-width": {
+      "type": "float",
+      "name": "Hitbox line width",
+      "default": 0.3,
+      "min": 0.05,
+      "max": 5.0,
+      "control": {
+        "slider": true,
+        "slider-step": 0.05,
+        "input": true
+      },
+      "enable-if": "show-hitboxes"
+    },
+    "hitbox-fill-opacity": {
+      "type": "float",
+      "name": "Hitbox fill opacity",
+      "default": 0.08,
+      "min": 0.0,
+      "max": 1.0,
+      "control": {
+        "slider": true,
+        "slider-step": 0.01,
+        "input": true
+      },
+      "enable-if": "show-hitboxes"
+    },
+    "solid-color": {
+      "type": "rgba",
+      "name": "Solid color",
+      "default": [0, 63, 255, 255],
+      "enable-if": "show-hitboxes"
+    },
+    "hazard-color": {
+      "type": "rgba",
+      "name": "Hazard color",
+      "default": [255, 0, 0, 255],
+      "enable-if": "show-hitboxes"
+    },
+    "interactable-color": {
+      "type": "rgba",
+      "name": "Interactable color",
+      "default": [0, 255, 64, 255],
+      "enable-if": "show-hitboxes"
+    },
+    "player-color": {
+      "type": "rgba",
+      "name": "Player color",
+      "default": [255, 0, 0, 255],
+      "enable-if": "show-hitboxes"
+    },
+    "player-inner-color": {
+      "type": "rgba",
+      "name": "Player inner color",
+      "default": [0, 255, 51, 255],
+      "enable-if": "show-hitboxes"
+    },
+    "player-rotated-color": {
+      "type": "rgba",
+      "name": "Player rotated color",
+      "default": [255, 255, 0, 255],
+      "enable-if": "show-hitboxes"
+    }
+  }
+}

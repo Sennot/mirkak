@@ -1,3 +1,4 @@
+#include "hidden_objects.hpp"
 #include "layout_pass.hpp"
 #include "layout_renderer.hpp"
 #include "object_roles.hpp"
@@ -12,6 +13,7 @@
 #include <Geode/modify/PlayLayer.hpp>
 #include <Geode/modify/ShaderLayer.hpp>
 
+#include <algorithm>
 #include <array>
 
 using namespace geode::prelude;
@@ -66,13 +68,31 @@ namespace layoutfeed {
                 return;
             }
 
-            auto const tint = role == roles::Role::Main ? settings::objectColor() : settings::detailColor();
             auto const forceOpacity = settings::forceOpacity();
+            if (role == roles::Role::Opaque && !forceOpacity) {
+                CCSprite::draw();
+                return;
+            }
+
+            auto const tint = role == roles::Role::Main ? settings::objectColor() : settings::detailColor();
             std::array<ccV3F_C4B_T2F*, 4> const vertices{&m_sQuad.bl, &m_sQuad.br, &m_sQuad.tl, &m_sQuad.tr};
             std::array<ccColor4B, 4> saved{};
             for (std::size_t i = 0; i < vertices.size(); ++i) {
-                saved[i] = vertices[i]->colors;
-                auto const alpha = forceOpacity ? 255u : static_cast<unsigned>(saved[i].a);
+                auto const original = vertices[i]->colors;
+                saved[i] = original;
+                if (role == roles::Role::Opaque) {
+                    // Same colors at full opacity (undo premultiplication).
+                    auto const unpremultiply = [&](GLubyte value) {
+                        return original.a
+                            ? static_cast<GLubyte>(std::min(255u, value * 255u / original.a))
+                            : static_cast<GLubyte>(255);
+                    };
+                    vertices[i]->colors = {
+                        unpremultiply(original.r), unpremultiply(original.g), unpremultiply(original.b), 255,
+                    };
+                    continue;
+                }
+                auto const alpha = forceOpacity ? 255u : static_cast<unsigned>(original.a);
                 vertices[i]->colors = {
                     static_cast<GLubyte>(tint.r * alpha / 255u),
                     static_cast<GLubyte>(tint.g * alpha / 255u),
@@ -125,6 +145,7 @@ namespace layoutfeed {
             // Objects are created inside init, so start collecting first.
             pass::onLevelEnter(this);
             if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
+            hidden::attach(this);
             roles::logSummary();
             return true;
         }
@@ -135,6 +156,7 @@ namespace layoutfeed {
         }
 
         void onQuit() {
+            hidden::detach();
             pass::onLevelExit(this);
             PlayLayer::onQuit();
         }

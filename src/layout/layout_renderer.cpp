@@ -7,6 +7,7 @@
 #include <Geode/cocos/platform/win32/CCGL.h>
 
 #include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <string>
 #include <unordered_map>
@@ -22,7 +23,8 @@ namespace layoutfeed::renderer {
         // The atlas indices map quad N to vertices 4N..4N+3, so gl_VertexID / 4
         // is the quad index. Hidden quads are moved outside the clip volume and
         // never reach the rasterizer; colors are replaced without touching the
-        // game's vertex data. Roles: 0 keep, 1 hide, 2 main color, 3 detail.
+        // game's vertex data. Roles: 0 keep, 1 hide, 2 main color, 3 detail,
+        // 4 original colors at full opacity.
         constexpr char const* kVertexShader = R"(#version 130
 in vec4 a_position;
 in vec4 a_color;
@@ -34,13 +36,17 @@ uniform int u_flagsWidth;
 uniform vec3 u_mainTint;
 uniform vec3 u_detailTint;
 uniform float u_forceOpaque;
+uniform int u_roleOverride;
 
 out vec4 v_color;
 out vec2 v_texCoord;
 
 void main() {
-    int quad = gl_VertexID / 4;
-    int role = int(texelFetch(u_flags, ivec2(quad % u_flagsWidth, quad / u_flagsWidth), 0).r * 255.0 + 0.5);
+    int role = u_roleOverride;
+    if (role < 0) {
+        int quad = gl_VertexID / 4;
+        role = int(texelFetch(u_flags, ivec2(quad % u_flagsWidth, quad / u_flagsWidth), 0).r * 255.0 + 0.5);
+    }
     if (role == 1) {
         gl_Position = vec4(2.0, 2.0, 2.0, 1.0);
         v_color = vec4(0.0);
@@ -54,6 +60,9 @@ void main() {
         vec3 tint = role == 2 ? u_mainTint : u_detailTint;
         // Game textures and vertex colors use premultiplied alpha.
         color = vec4(tint * alpha, alpha);
+    } else if (role == 4 && u_forceOpaque > 0.5) {
+        // Undo the premultiplication: same colors, fully opaque.
+        color = a_color.a > 0.004 ? vec4(a_color.rgb / a_color.a, 1.0) : vec4(1.0);
     }
 
     gl_Position = u_mvp * a_position;
@@ -83,6 +92,7 @@ void main() {
             GLint mainTint = -1;
             GLint detailTint = -1;
             GLint forceOpaque = -1;
+            GLint roleOverride = -1;
         };
 
         struct BatchCache {
@@ -102,6 +112,7 @@ void main() {
         Uniforms s_uniforms;
         std::unordered_map<CCSpriteBatchNode*, BatchCache> s_caches;
         GLint s_maxTextureSize = 0;
+        GLuint s_revealBuffer = 0;
 
         std::string infoLog(GLuint object, bool program) {
             GLint length = 0;
@@ -182,6 +193,7 @@ void main() {
             s_uniforms.mainTint = glGetUniformLocation(s_program, "u_mainTint");
             s_uniforms.detailTint = glGetUniformLocation(s_program, "u_detailTint");
             s_uniforms.forceOpaque = glGetUniformLocation(s_program, "u_forceOpaque");
+            s_uniforms.roleOverride = glGetUniformLocation(s_program, "u_roleOverride");
             if (s_uniforms.mvp < 0 || s_uniforms.flags < 0 || s_uniforms.texture < 0) {
                 log::error(
                     "Layout renderer: missing uniforms (mvp {}, texture {}, flags {})",
@@ -323,6 +335,7 @@ void main() {
         setTint(s_uniforms.mainTint, settings::objectColor());
         setTint(s_uniforms.detailTint, settings::detailColor());
         glUniform1f(s_uniforms.forceOpaque, settings::forceOpacity() ? 1.f : 0.f);
+        glUniform1i(s_uniforms.roleOverride, -1);
     }
 
     bool drawObjectBatch(CCSpriteBatchNode* batch) {
@@ -363,6 +376,46 @@ void main() {
         counters.quadsDrawn += quads - cache.hidden;
         counters.quadsHidden += cache.hidden;
         return true;
+    }
+
+    void drawRevealed(CCTexture2D* texture, std::vector<ccV3F_C4B_T2F> const& vertices) {
+        if (s_state != State::Ready || !texture || vertices.empty()) return;
+
+        kmMat4 projection;
+        kmMat4 modelView;
+        kmMat4 mvp;
+        kmGLGetMatrix(KM_GL_PROJECTION, &projection);
+        kmGLGetMatrix(KM_GL_MODELVIEW, &modelView);
+        kmMat4Multiply(&mvp, &projection, &modelView);
+
+        ccGLUseProgram(s_program);
+        glUniformMatrix4fv(s_uniforms.mvp, 1, GL_FALSE, mvp.mat);
+        // Vertex colors are final (premultiplied, opaque): role "keep".
+        glUniform1i(s_uniforms.roleOverride, 0);
+        ccGLBindTexture2D(texture->getName());
+        ccGLBlendFunc(GL_ONE, GL_ONE_MINUS_SRC_ALPHA);
+
+        if (!s_revealBuffer) glGenBuffers(1, &s_revealBuffer);
+        ccGLBindVAO(0);
+        glBindBuffer(GL_ARRAY_BUFFER, s_revealBuffer);
+        glBufferData(
+            GL_ARRAY_BUFFER, static_cast<GLsizeiptr>(vertices.size() * sizeof(ccV3F_C4B_T2F)),
+            vertices.data(), GL_STREAM_DRAW
+        );
+        ccGLEnableVertexAttribs(kCCVertexAttribFlag_PosColorTex);
+        auto const stride = static_cast<GLsizei>(sizeof(ccV3F_C4B_T2F));
+        glVertexAttribPointer(kCCVertexAttrib_Position, 3, GL_FLOAT, GL_FALSE, stride,
+            reinterpret_cast<void const*>(offsetof(ccV3F_C4B_T2F, vertices)));
+        glVertexAttribPointer(kCCVertexAttrib_Color, 4, GL_UNSIGNED_BYTE, GL_TRUE, stride,
+            reinterpret_cast<void const*>(offsetof(ccV3F_C4B_T2F, colors)));
+        glVertexAttribPointer(kCCVertexAttrib_TexCoords, 2, GL_FLOAT, GL_FALSE, stride,
+            reinterpret_cast<void const*>(offsetof(ccV3F_C4B_T2F, texCoords)));
+        glDrawArrays(GL_TRIANGLES, 0, static_cast<GLsizei>(vertices.size()));
+        // cocos2d draws plain sprites from client-side arrays, which requires
+        // buffer 0 to be bound again.
+        glBindBuffer(GL_ARRAY_BUFFER, 0);
+        glUniform1i(s_uniforms.roleOverride, -1);
+        debug::checkGL("renderer::drawRevealed");
     }
 
     void releaseCaches(char const* reason) {

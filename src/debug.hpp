@@ -34,6 +34,7 @@ namespace layoutfeed::debug {
         std::uint32_t spritesTinted = 0;
         std::uint32_t spritesHidden = 0;
         std::uint32_t particlesSkipped = 0;
+        std::uint32_t objectsRevealed = 0;
         std::uint32_t fallbackDraws = 0;
     };
 

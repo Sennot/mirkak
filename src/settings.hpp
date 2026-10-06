@@ -10,6 +10,7 @@ namespace layoutfeed::settings {
     bool enabled();
     std::string const& senderName();
     bool captureCursor();
+    bool captureMenus();
 
     // Layout Mode
     bool layoutEnabled();

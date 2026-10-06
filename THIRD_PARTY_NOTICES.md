@@ -7,6 +7,12 @@
 - License: BSD 2-Clause; see [licenses/Spout2-BSD-2-Clause.txt](licenses/Spout2-BSD-2-Clause.txt).
 - Use: the SpoutGL implementation is vendored under `third_party/spout` and statically linked into the mod DLL.
 
+## Spout2 Clean Feed (reference)
+
+- The user's earlier mod, supplied in `reference/`. The Spout2 sender, the swapBuffers hook ordering
+  around Mega Hack and the visible-section traversal (itself informed by Eclipse Menu, EPL-2.0) come
+  from it.
+
 ## GDH (reference only)
 
 - Source: https://gitlab.com/tobyadd/GDH (`src/hacks/level/layout_mode.cpp`)

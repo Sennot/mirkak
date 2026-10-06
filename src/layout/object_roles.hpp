@@ -12,6 +12,7 @@ namespace layoutfeed::roles {
         Hide = 1,   // not drawn (decoration, no-touch objects)
         Main = 2,   // drawn with the layout object color
         Detail = 3, // drawn with the layout detail color
+        Opaque = 4, // original colors, opacity forced when "show invisible" is on
     };
 
     // Starts collecting sprites of a new PlayLayer and forgets the previous one.
@@ -23,8 +24,17 @@ namespace layoutfeed::roles {
     void registerGlow(GameObject* object);
 
     // Resolves the role of a sprite drawn in the layout pass. Unknown sprites
-    // are classified once (RTTI walk to their GameObject) and then cached.
+    // are classified once (parent walk to a registered object) and cached;
+    // every hit is re-validated so reused sprite addresses never keep a role.
     Role resolve(cocos2d::CCNode* sprite);
+
+    // Decoration hidden by the current settings.
+    bool hiddenInLayout(GameObject* object);
+
+    // Color for an object part revealed by the layout pass (hidden by alpha
+    // or the Hide option): the layout color, or white for parts that have no
+    // color channel and keep their own art.
+    cocos2d::ccColor3B revealColor(GameObject* owner, bool detail);
 
     // Changes whenever a resolved role can differ from before: new sprites,
     // or settings that affect the role mapping. Flag caches compare it.

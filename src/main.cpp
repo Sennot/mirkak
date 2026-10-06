@@ -1,9 +1,11 @@
 #include <Geode/Geode.hpp>
 #include <Geode/loader/SettingV3.hpp>
+#include <Geode/modify/CCDirector.hpp>
 #include <Geode/modify/CCEGLView.hpp>
 
 #include "debug.hpp"
 #include "layout/layout_pass.hpp"
+#include "overlay_capture.hpp"
 #include "settings.hpp"
 #include "spout/spout_sender.hpp"
 
@@ -11,38 +13,105 @@ using namespace geode::prelude;
 
 namespace layoutfeed {
     namespace {
-        // One presented frame:
-        //   1. the game has rendered the normal frame (decoration, colors,
-        //      shaders, camera effects) into the back buffer;
-        //   2. that frame is shared with OBS through Spout2 (GPU copy);
-        //   3. in a level with Layout Mode on, the scene is drawn again on top
-        //      in layout style, and only that version reaches the monitor.
-        void present() {
-            {
-                debug::CpuScope cpu(debug::Timer::Spout);
-                debug::GpuScope gpu(debug::Timer::Spout);
-                spout::SpoutSender::get().captureBackBuffer();
-            }
-            debug::checkGL("spout::capture");
+        // Mod menus that draw inside their own swapBuffers hook. The two hooks
+        // below are ordered around them, as in the reference clean-feed mod.
+        constexpr char const* kMenuMods[] = {"absolllute.hackmega", "absolllute.megahack"};
+        constexpr char const* kSwapHook = "cocos2d::CCEGLView::swapBuffers";
 
-            if (pass::shouldRender()) pass::render();
+        enum class FrameMode {
+            Plain,      // no layout: Spout2 captures after the menus
+            Redirected, // layout + menus composited into both outputs
+            Early,      // layout, menus kept out of Spout2 (or redirect unavailable)
+        };
+
+        FrameMode s_mode = FrameMode::Plain;
+
+        void captureSpout() {
+            debug::CpuScope cpu(debug::Timer::Spout);
+            debug::GpuScope gpu(debug::Timer::Spout);
+            spout::SpoutSender::get().captureBackBuffer();
+        }
+
+        // Runs before the menus draw: the back buffer holds the normal frame.
+        void beforeMenus() {
+            debug::checkGL("frame start (errors from the game or other mods)");
+            if (overlay::redirecting()) overlay::abandon("swapBuffers");
+
+            s_mode = FrameMode::Plain;
+            if (!pass::shouldRender()) return;
+
+            if (settings::captureMenus() && overlay::begin(&pass::render)) {
+                s_mode = FrameMode::Redirected;
+                return;
+            }
+
+            // Simple path: send the normal frame now, then draw the layout.
+            s_mode = FrameMode::Early;
+            captureSpout();
+            debug::checkGL("spout::capture");
+            pass::render();
+        }
+
+        // Runs after the menus have drawn, right before the real swap.
+        void afterMenus() {
+            switch (s_mode) {
+                case FrameMode::Redirected:
+                    overlay::finish();
+                    break;
+                case FrameMode::Plain:
+                    captureSpout();
+                    debug::checkGL("spout::capture");
+                    break;
+                case FrameMode::Early:
+                    break;
+            }
+            s_mode = FrameMode::Plain;
             debug::endFrame();
         }
     }
 
-    class $modify(LayoutFeedView, cocos2d::CCEGLView) {
+    class $modify(LayoutFeedBeforeMenus, cocos2d::CCEGLView) {
         static void onModify(auto& self) {
-            // Run before every other swapBuffers hook. Overlays drawn later by
-            // other mods (ImGui menus, Mega Hack) stay on the monitor and are
-            // neither captured into Spout2 nor covered by the layout pass.
-            if (auto result = self.setHookPriority("cocos2d::CCEGLView::swapBuffers", Priority::FirstPre); result.isErr()) {
+            if (auto result = self.setHookPriority(kSwapHook, Priority::FirstPre); result.isErr()) {
                 log::warn("Unable to set swapBuffers hook priority: {}", result.unwrapErr());
+            }
+            for (auto const id : kMenuMods) {
+                if (auto* mod = Loader::get()->getInstalledMod(id)) {
+                    (void)self.setHookPriorityBeforePre(kSwapHook, mod);
+                }
             }
         }
 
         void swapBuffers() override {
-            present();
+            beforeMenus();
             cocos2d::CCEGLView::swapBuffers();
+        }
+    };
+
+    class $modify(LayoutFeedAfterMenus, cocos2d::CCEGLView) {
+        static void onModify(auto& self) {
+            if (auto result = self.setHookPriority(kSwapHook, Priority::LastPre); result.isErr()) {
+                log::warn("Unable to set swapBuffers hook priority: {}", result.unwrapErr());
+            }
+            for (auto const id : kMenuMods) {
+                if (auto* mod = Loader::get()->getInstalledMod(id)) {
+                    (void)self.setHookPriorityAfterPre(kSwapHook, mod);
+                }
+            }
+        }
+
+        void swapBuffers() override {
+            afterMenus();
+            cocos2d::CCEGLView::swapBuffers();
+        }
+    };
+
+    class $modify(LayoutFeedDirector, cocos2d::CCDirector) {
+        void drawScene() {
+            // Never let a frame render into the overlay target if a previous
+            // swap was skipped by another hook.
+            if (overlay::redirecting()) overlay::abandon("drawScene");
+            cocos2d::CCDirector::drawScene();
         }
     };
 }
@@ -50,6 +119,11 @@ namespace layoutfeed {
 $on_mod(Loaded) {
     log::info("Spout2 Layout Feed {} loaded", Mod::get()->getVersion().toVString());
     layoutfeed::settings::logSummary();
+    for (auto const id : layoutfeed::kMenuMods) {
+        if (auto* mod = Loader::get()->getInstalledMod(id)) {
+            log::info("Menu mod {} detected; swapBuffers hooks are ordered around it", mod->getID());
+        }
+    }
 }
 
 $on_game(Loaded) {

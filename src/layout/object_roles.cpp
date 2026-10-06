@@ -65,7 +65,25 @@ namespace layoutfeed::roles {
         constexpr std::uint8_t kOwnerBits = kDecorationBit | kFixedColorBit;
         constexpr std::uint8_t kPartMask = 0x0F;
 
-        std::unordered_map<CCNode const*, std::uint8_t> s_entries;
+        // How an entry is re-validated on every lookup. GD frees and creates
+        // sprites while a level runs (detail and glow sprites of activated
+        // objects, animated children); a new sprite can get the address of a
+        // freed one and must never inherit its role. A stale "Hide" entry was
+        // what made gameplay objects such as dash orbs vanish at random.
+        enum class Origin : std::uint8_t {
+            Object, // the GameObject itself; objects live as long as the level
+            Glow,   // ref = owner, valid while owner->m_glowSprite == sprite
+            Detail, // ref = owner, valid while owner->m_colorSprite == sprite
+            Lazy,   // ref = parent at classification time
+        };
+
+        struct Entry {
+            std::uint8_t bits = 0;
+            Origin origin = Origin::Lazy;
+            CCNode const* ref = nullptr;
+        };
+
+        std::unordered_map<CCNode const*, Entry> s_entries;
         std::uint32_t s_generation = 1;
         bool s_collecting = false;
 
@@ -76,6 +94,7 @@ namespace layoutfeed::roles {
             std::uint32_t glowSprites = 0;
             std::uint32_t lazy = 0;
             std::uint32_t lazyKeep = 0;
+            std::uint32_t stale = 0;
         } s_totals;
 
         bool isDecoration(GameObject* object) {
@@ -85,29 +104,55 @@ namespace layoutfeed::roles {
                  decorationIDs().test(static_cast<std::size_t>(id)));
         }
 
+        bool hasFixedColor(GameObject* owner, Part part) {
+            return (part == PartMain && !owner->m_baseColor) || (part == PartDetail && !owner->m_detailColor);
+        }
+
         std::uint8_t entryFor(GameObject* owner, Part part) {
             auto entry = static_cast<std::uint8_t>(part);
             if (isDecoration(owner)) entry |= kDecorationBit;
-            if ((part == PartMain && !owner->m_baseColor) || (part == PartDetail && !owner->m_detailColor)) {
-                entry |= kFixedColorBit;
-            }
+            if (hasFixedColor(owner, part)) entry |= kFixedColorBit;
             return entry;
         }
 
-        void store(CCNode const* node, std::uint8_t entry) {
+        void store(CCNode const* node, Entry entry) {
             if (node) s_entries.insert_or_assign(node, entry);
         }
 
         void storeParts(GameObject* object) {
-            store(object, entryFor(object, PartMain));
+            store(object, {entryFor(object, PartMain), Origin::Object, nullptr});
             if (object->m_colorSprite) {
-                store(object->m_colorSprite, entryFor(object, PartDetail));
+                store(object->m_colorSprite, {entryFor(object, PartDetail), Origin::Detail, object});
                 ++s_totals.detailSprites;
             }
             if (object->m_glowSprite) {
-                store(object->m_glowSprite, entryFor(object, PartGlow));
+                store(object->m_glowSprite, {entryFor(object, PartGlow), Origin::Glow, object});
                 ++s_totals.glowSprites;
             }
+        }
+
+        bool valid(CCNode const* node, Entry const& entry) {
+            switch (entry.origin) {
+                case Origin::Object:
+                    return true;
+                case Origin::Glow:
+                    return static_cast<GameObject const*>(entry.ref)->m_glowSprite == node;
+                case Origin::Detail:
+                    return static_cast<GameObject const*>(entry.ref)->m_colorSprite == node;
+                case Origin::Lazy:
+                    return node->getParent() == entry.ref;
+            }
+            return false;
+        }
+
+        // Finds a still valid entry; stale ones are dropped.
+        Entry const* lookup(CCNode const* node) {
+            auto found = s_entries.find(node);
+            if (found == s_entries.end()) return nullptr;
+            if (valid(node, found->second)) return &found->second;
+            s_entries.erase(found);
+            ++s_totals.stale;
+            return nullptr;
         }
 
         Role toRole(std::uint8_t entry) {
@@ -116,9 +161,8 @@ namespace layoutfeed::roles {
             if ((entry & kDecorationBit) && settings::hideDecoration()) return Role::Hide;
             // Glow layers are skipped as a whole when glow is hidden; visible
             // glow keeps its original look.
-            if (part == PartGlow || (entry & kFixedColorBit) || !settings::recolorObjects()) {
-                return Role::Keep;
-            }
+            if (part == PartGlow) return Role::Keep;
+            if ((entry & kFixedColorBit) || !settings::recolorObjects()) return Role::Opaque;
             return part == PartDetail ? Role::Detail : Role::Main;
         }
 
@@ -130,17 +174,15 @@ namespace layoutfeed::roles {
             CCNode* previous = node;
             auto* current = node->getParent();
             for (int depth = 0; current && depth < 4; ++depth) {
-                if (auto found = s_entries.find(current); found != s_entries.end()) {
-                    auto const entry = found->second;
-                    auto const part = entry & kPartMask;
-                    if (part == PartMain) {
-                        // PartMain entries are only ever stored for GameObjects.
+                if (auto const* entry = lookup(current)) {
+                    auto const part = entry->bits & kPartMask;
+                    if (part == PartMain && entry->origin == Origin::Object) {
                         auto* owner = static_cast<GameObject*>(current);
                         auto const detail = owner->m_colorSprite && previous == owner->m_colorSprite;
                         return entryFor(owner, detail ? PartDetail : PartMain);
                     }
-                    if (part == PartDetail || part == PartGlow) {
-                        return static_cast<std::uint8_t>(part | (entry & kOwnerBits));
+                    if (part != PartKeep) {
+                        return static_cast<std::uint8_t>(part | (entry->bits & kOwnerBits));
                     }
                 }
                 previous = current;
@@ -178,27 +220,35 @@ namespace layoutfeed::roles {
 
     void registerGlow(GameObject* object) {
         if (!s_collecting || !object || !object->m_glowSprite) return;
-        store(object->m_glowSprite, entryFor(object, PartGlow));
+        store(object->m_glowSprite, {entryFor(object, PartGlow), Origin::Glow, object});
         ++s_generation;
     }
 
     Role resolve(CCNode* sprite) {
         if (!sprite) return Role::Keep;
-        if (auto found = s_entries.find(sprite); found != s_entries.end()) {
-            return toRole(found->second);
-        }
+        if (auto const* entry = lookup(sprite)) return toRole(entry->bits);
 
-        auto const entry = classify(sprite);
-        s_entries.emplace(sprite, entry);
+        auto const bits = classify(sprite);
+        store(sprite, {bits, Origin::Lazy, sprite->getParent()});
         ++s_totals.lazy;
-        if ((entry & kPartMask) == PartKeep) {
+        if ((bits & kPartMask) == PartKeep) {
             ++s_totals.lazyKeep;
         } else {
             // A newly known object part: caches built this frame may hold the
             // previous Keep value for sprites classified together with it.
             ++s_generation;
         }
-        return toRole(entry);
+        return toRole(bits);
+    }
+
+    bool hiddenInLayout(GameObject* object) {
+        return settings::hideDecoration() && isDecoration(object);
+    }
+
+    ccColor3B revealColor(GameObject* owner, bool detail) {
+        auto const part = detail ? PartDetail : PartMain;
+        if (hasFixedColor(owner, part) || !settings::recolorObjects()) return {255, 255, 255};
+        return detail ? settings::detailColor() : settings::objectColor();
     }
 
     std::uint32_t generation() {
@@ -208,9 +258,9 @@ namespace layoutfeed::roles {
     void logSummary() {
         log::info(
             "roles: {} objects registered ({} decoration), {} detail sprites, {} glow sprites, "
-            "{} lazily classified ({} unrelated to objects), {} cache entries",
+            "{} lazily classified ({} unrelated to objects), {} stale entries replaced, {} cache entries",
             s_totals.objects, s_totals.decoration, s_totals.detailSprites, s_totals.glowSprites,
-            s_totals.lazy, s_totals.lazyKeep, s_entries.size()
+            s_totals.lazy, s_totals.lazyKeep, s_totals.stale, s_entries.size()
         );
     }
 }

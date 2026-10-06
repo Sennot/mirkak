@@ -5,7 +5,7 @@
   },
   "id": "halil.spout2-layout-feed",
   "name": "Spout2 Layout Feed",
-  "version": "v1.0.0",
+  "version": "v1.1.0",
   "developer": "halil",
   "description": "Plays levels in Layout Mode on your screen while OBS receives the normal, fully decorated level through Spout2.",
   "tags": ["gameplay", "utility"],
@@ -30,6 +30,13 @@
       "type": "bool",
       "name": "Capture cursor",
       "description": "Draws the Windows cursor into the Spout2 feed only.",
+      "default": true,
+      "enable-if": "enabled"
+    },
+    "capture-menus": {
+      "type": "bool",
+      "name": "Show mod menus in OBS",
+      "description": "Includes Mega Hack and other menus drawn in swapBuffers in the Spout2 feed, like the clean-feed mod. With Layout Mode on, the menus are composited on the GPU into both the feed and your screen.",
       "default": true,
       "enable-if": "enabled"
     },
@@ -66,7 +73,7 @@
     "layout-force-opacity": {
       "type": "bool",
       "name": "Show invisible objects",
-      "description": "Ignores alpha triggers and fades, like Layout Mode with alpha triggers removed.",
+      "description": "Shows objects hidden by alpha triggers, fades or the Hide option (toggled-off groups stay hidden), like Layout Mode with alpha triggers removed.",
       "default": true,
       "enable-if": "layout-enabled"
     },

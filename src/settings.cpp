@@ -12,6 +12,7 @@ namespace layoutfeed::settings {
             bool enabled = true;
             std::string senderName;
             bool captureCursor = true;
+            bool captureMenus = true;
 
             bool layoutEnabled = true;
             bool hideDecoration = true;
@@ -42,6 +43,7 @@ namespace layoutfeed::settings {
             value.senderName = mod->getSettingValue<std::string>("sender-name");
             if (value.senderName.empty()) value.senderName = "Geometry Dash";
             value.captureCursor = mod->getSettingValue<bool>("capture-cursor");
+            value.captureMenus = mod->getSettingValue<bool>("capture-menus");
 
             value.layoutEnabled = mod->getSettingValue<bool>("layout-enabled");
             value.hideDecoration = mod->getSettingValue<bool>("layout-hide-decoration");
@@ -87,6 +89,7 @@ namespace layoutfeed::settings {
     bool enabled() { return cache().enabled; }
     std::string const& senderName() { return cache().senderName; }
     bool captureCursor() { return cache().captureCursor; }
+    bool captureMenus() { return cache().captureMenus; }
 
     bool layoutEnabled() { return cache().layoutEnabled; }
     bool hideDecoration() { return cache().hideDecoration; }
@@ -115,9 +118,9 @@ namespace layoutfeed::settings {
     void logSummary() {
         auto const& value = cache();
         log::info(
-            "Settings: spout={} sender='{}' cursor={} | layout={} deco={} recolor={} opacity={} "
+            "Settings: spout={} sender='{}' cursor={} menus={} | layout={} deco={} recolor={} opacity={} "
             "blending={} glow={} particles={} mg={} shaders={} | debug={} interval={}s gpuTimers={}",
-            value.enabled, value.senderName, value.captureCursor,
+            value.enabled, value.senderName, value.captureCursor, value.captureMenus,
             value.layoutEnabled, value.hideDecoration, value.recolorObjects, value.forceOpacity,
             value.normalBlending, value.hideGlow, value.hideParticles, value.hideMiddleground,
             value.disableShaders, value.debugLogging, value.statsInterval, value.gpuTimers
