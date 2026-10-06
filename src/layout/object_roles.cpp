@@ -160,9 +160,10 @@ namespace layoutfeed::roles {
             auto const part = entry & kPartMask;
             if (part == PartKeep) return Role::Keep;
             if ((entry & kDecorationBit) && settings::hideDecoration()) return Role::Hide;
-            // Glow layers are skipped as a whole when glow is hidden; visible
-            // glow keeps its original look.
-            if (part == PartGlow) return Role::Keep;
+            // Only sprites registered as an object's glow are hidden. Glow
+            // batch layers also hold other art (parts of portals and orbs),
+            // which skipping whole layers used to remove.
+            if (part == PartGlow) return settings::hideGlow() ? Role::Hide : Role::Keep;
             if ((entry & kFixedColorBit) || !settings::recolorObjects()) return Role::Opaque;
             return part == PartDetail ? Role::Detail : Role::Main;
         }

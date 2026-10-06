@@ -34,10 +34,8 @@ namespace layoutfeed {
                     CCSpriteBatchNode::draw();
                     return;
                 case pass::BatchKind::Glow:
-                    if (settings::hideGlow()) {
-                        ++debug::counters().glowBatchesSkipped;
-                        return;
-                    }
+                    // Glow sprites are hidden per sprite by their role.
+                    ++debug::counters().glowBatches;
                     [[fallthrough]];
                 case pass::BatchKind::Object:
                     if (!renderer::drawObjectBatch(this)) {

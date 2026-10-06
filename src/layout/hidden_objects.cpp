@@ -7,6 +7,7 @@
 #include "../settings.hpp"
 
 #include <algorithm>
+#include <array>
 #include <utility>
 #include <vector>
 
@@ -46,7 +47,29 @@ namespace layoutfeed::hidden {
             }
         }
 
-        bool revealable(GameObject* object) {
+        // The window rectangle in object-layer space (all four corners, so
+        // rotated and zoomed cameras are covered), with a small margin.
+        CCRect visibleArea(GJBaseGameLayer* layer) {
+            auto const size = CCDirector::sharedDirector()->getWinSize();
+            auto* objectLayer = layer->m_objectLayer;
+            std::array<CCPoint, 4> const corners{
+                objectLayer->convertToNodeSpace({0.f, 0.f}),
+                objectLayer->convertToNodeSpace({size.width, 0.f}),
+                objectLayer->convertToNodeSpace({0.f, size.height}),
+                objectLayer->convertToNodeSpace({size.width, size.height}),
+            };
+            auto minX = corners[0].x, maxX = corners[0].x, minY = corners[0].y, maxY = corners[0].y;
+            for (auto const& point : corners) {
+                minX = std::min(minX, point.x);
+                maxX = std::max(maxX, point.x);
+                minY = std::min(minY, point.y);
+                maxY = std::max(maxY, point.y);
+            }
+            constexpr float margin = 60.f;
+            return {minX - margin, minY - margin, maxX - minX + margin * 2.f, maxY - minY + margin * 2.f};
+        }
+
+        bool revealable(GameObject* object, CCRect const& area) {
             if (!object || object->m_isTrigger || object->m_isStartPos || object->m_isUIObject ||
                 object->m_isGroupDisabled) {
                 // Toggled-off groups stay hidden, as in GDH's Layout Mode.
@@ -63,8 +86,19 @@ namespace layoutfeed::hidden {
             // the layout shader (forced opacity); only geometry GD does not
             // draw at all is rebuilt here.
             auto const visible = object->isVisible();
-            auto const hidden = object->m_isHide || !visible || !object->getParent();
+            auto const active = object->getParent() != nullptr;
+            auto const hidden = object->m_isHide || !visible || !active;
             if (!hidden) return false;
+
+            // GD keeps every object in view active. An inactive object is only
+            // revealed when it is really on screen; objects at the edge of the
+            // visible sections switch between active and inactive and were
+            // drawn twice or in old places, which flickered.
+            if (!active && !area.containsPoint({
+                static_cast<float>(object->m_positionX), static_cast<float>(object->m_positionY)
+            })) {
+                return false;
+            }
 
             // Picked-up coins and broken blocks are hidden by gameplay, not by
             // the level design; they must not come back.
@@ -98,8 +132,9 @@ namespace layoutfeed::hidden {
                 for (auto& batch : m_batches) batch.second.clear();
 
                 std::uint32_t revealed = 0;
+                auto const area = visibleArea(m_layer);
                 forEachObjectOnScreen(m_layer, [&](GameObject* object) {
-                    if (!revealable(object)) return;
+                    if (!revealable(object, area)) return;
                     ++revealed;
                     appendObject(object);
                 });
@@ -173,15 +208,26 @@ namespace layoutfeed::hidden {
 
             void appendObject(GameObject* object) {
                 // Object batches sit at the origin of the object layer, so the
-                // object's own transform is its object-layer transform.
-                auto const identity = CCAffineTransformMakeIdentity();
-                appendSprite(object, identity, roles::revealColor(object, false));
-                appendChildren(object, object, object->nodeToParentTransform(), 0);
+                // object's own transform is its object-layer transform. GD
+                // stops updating the node position of inactive objects while
+                // move triggers keep changing their real position, so those
+                // are shifted to where the game currently has them.
+                auto base = CCAffineTransformMakeIdentity();
+                if (!object->getParent()) {
+                    auto const position = object->getPosition();
+                    base = CCAffineTransformMake(
+                        1.f, 0.f, 0.f, 1.f,
+                        static_cast<float>(object->m_positionX) - position.x,
+                        static_cast<float>(object->m_positionY) - position.y
+                    );
+                }
+                appendSprite(object, base, roles::revealColor(object, false));
+                appendChildren(object, object, CCAffineTransformConcat(object->nodeToParentTransform(), base), 0);
 
                 // A detail sprite added beside the object in its batch follows
                 // the object but is not its child.
                 if (auto* detail = object->m_colorSprite; detail && detail->getParent() != object) {
-                    appendSprite(detail, identity, roles::revealColor(object, true));
+                    appendSprite(detail, base, roles::revealColor(object, true));
                 }
             }
 

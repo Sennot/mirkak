@@ -104,6 +104,7 @@ void main() {
             std::uint32_t settingsGeneration = 0;
             std::uint32_t hidden = 0;
             std::vector<CCObject*> sprites;
+            std::vector<unsigned int> indices;
             std::vector<std::uint8_t> flags;
         };
 
@@ -267,11 +268,17 @@ void main() {
             auto const rolesGeneration = roles::generation();
             auto const settingsGeneration = settings::generation();
 
-            auto const unchanged = cache.texture && cache.atlas == atlas && cache.quads == quads &&
+            auto unchanged = cache.texture && cache.atlas == atlas && cache.quads == quads &&
                 cache.rolesGeneration == rolesGeneration &&
                 cache.settingsGeneration == settingsGeneration &&
-                cache.sprites.size() == count &&
+                cache.sprites.size() == count && cache.indices.size() == count &&
                 (count == 0 || std::memcmp(cache.sprites.data(), items, count * sizeof(CCObject*)) == 0);
+            // Same sprites can still be moved to other quads (z-order
+            // changes); a mask applied to shifted quads hides or recolors the
+            // wrong objects for a frame, which looked like flickering.
+            for (unsigned int i = 0; unchanged && i < count; ++i) {
+                unchanged = static_cast<CCSprite*>(items[i])->m_uAtlasIndex == cache.indices[i];
+            }
             if (unchanged) {
                 ++debug::counters().flagReuses;
                 return true;
@@ -287,12 +294,14 @@ void main() {
             if ((!cache.texture || rows > cache.rows) && !allocate(cache, rows)) return false;
 
             cache.flags.assign(static_cast<std::size_t>(rows) * kFlagsWidth, 0);
+            cache.indices.resize(count);
             cache.hidden = 0;
             for (unsigned int i = 0; i < count; ++i) {
                 auto* sprite = static_cast<CCSprite*>(items[i]);
+                cache.indices[i] = sprite ? sprite->m_uAtlasIndex : 0u;
                 if (!sprite) continue;
-                auto index = sprite->m_uAtlasIndex;
-                if (index >= quads) index = i;
+                // Sprites without a valid quad are not drawn by this atlas.
+                auto const index = sprite->m_uAtlasIndex;
                 if (index >= quads) continue;
                 auto const role = roles::resolve(sprite);
                 cache.flags[index] = static_cast<std::uint8_t>(role);

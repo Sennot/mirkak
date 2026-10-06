@@ -206,10 +206,10 @@ namespace layoutfeed::debug {
         if (c.layoutFrames) {
             auto const frames = static_cast<double>(c.layoutFrames);
             log::info(
-                "[stats]   layout per frame: {:.1f} object batches, {:.1f} glow batches skipped, "
+                "[stats]   layout per frame: {:.1f} object batches, {:.1f} glow batches, "
                 "{:.0f} quads drawn, {:.0f} quads hidden, {:.1f} sprites tinted, "
                 "{:.1f} sprites hidden, {:.1f} particle systems skipped, {:.1f} hidden objects revealed",
-                c.objectBatchDraws / frames, c.glowBatchesSkipped / frames,
+                c.objectBatchDraws / frames, c.glowBatches / frames,
                 c.quadsDrawn / frames, c.quadsHidden / frames, c.spritesTinted / frames,
                 c.spritesHidden / frames, c.particlesSkipped / frames, c.objectsRevealed / frames
             );

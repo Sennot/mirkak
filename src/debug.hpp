@@ -26,7 +26,7 @@ namespace layoutfeed::debug {
     struct Counters {
         std::uint32_t layoutFrames = 0;
         std::uint32_t objectBatchDraws = 0;
-        std::uint32_t glowBatchesSkipped = 0;
+        std::uint32_t glowBatches = 0;
         std::uint32_t flagRebuilds = 0;
         std::uint32_t flagReuses = 0;
         std::uint64_t quadsDrawn = 0;
