@@ -226,10 +226,10 @@ namespace layoutfeed::hidden {
                 // drawing in sync while move triggers change their real
                 // position, so revealed parts go where the game has them.
                 auto const position = object->getPosition();
-                m_shift = {
+                m_shift = CCPoint(
                     static_cast<float>(object->m_positionX) - position.x,
-                    static_cast<float>(object->m_positionY) - position.y,
-                };
+                    static_cast<float>(object->m_positionY) - position.y
+                );
                 auto const base = CCAffineTransformMake(1.f, 0.f, 0.f, 1.f, m_shift.x, m_shift.y);
                 if (mainHidden) {
                     appendSprite(object, base, roles::revealColor(object, false));
