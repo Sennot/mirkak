@@ -98,9 +98,22 @@ namespace layoutfeed::hidden {
             return !roles::hiddenInLayout(object);
         }
 
-        bool collapsed(CCSprite* sprite) {
-            auto const& quad = sprite->m_sQuad;
+        bool collapsedQuad(ccV3F_C4B_T2F_Quad const& quad) {
             return quad.bl.vertices.x == quad.tr.vertices.x && quad.bl.vertices.y == quad.tr.vertices.y;
+        }
+
+        // The quad the GPU actually receives: the atlas entry of a batched
+        // sprite, not the sprite's own copy. GD writes the geometry of some
+        // objects (DontDraw sprites: saws, slopes) itself, so the two differ.
+        ccV3F_C4B_T2F_Quad const* atlasQuad(CCSprite* sprite) {
+            auto* atlas = sprite->m_pobTextureAtlas;
+            if (!sprite->m_pobBatchNode || !atlas || sprite->m_uAtlasIndex >= atlas->getTotalQuads()) return nullptr;
+            return &atlas->getQuads()[sprite->m_uAtlasIndex];
+        }
+
+        bool collapsed(CCSprite* sprite) {
+            if (auto const* quad = atlasQuad(sprite)) return collapsedQuad(*quad);
+            return collapsedQuad(sprite->m_sQuad);
         }
 
         // Every node from the sprite up to (not including) the object layer
@@ -123,18 +136,9 @@ namespace layoutfeed::hidden {
             return !(sprite->m_pobBatchNode && collapsed(sprite));
         }
 
-        // Composite objects (DontDraw frame, art in children) are judged by
-        // their first sprite child.
         bool objectDrawnByGame(GameObject* object, CCNode* objectLayer) {
             if (object->m_isHide) return false;
-            if (!object->getDontDraw()) return drawnByGame(object, objectLayer);
-            if (!object->getParent() || !visibleChain(object, objectLayer)) return false;
-            if (auto* children = object->getChildren()) {
-                for (auto* child : CCArrayExt<CCNode*>(children)) {
-                    if (auto* sprite = typeinfo_cast<CCSprite*>(child)) return drawnByGame(sprite, objectLayer);
-                }
-            }
-            return true;
+            return drawnByGame(object, objectLayer);
         }
 
         class RevealNode final : public CCNode {
@@ -205,8 +209,7 @@ namespace layoutfeed::hidden {
                 auto const mainHidden = !objectDrawnByGame(object, objectLayer);
                 auto* detail = object->m_colorSprite;
                 auto const separateDetail = detail && detail->getParent() != object;
-                auto const detailHidden = separateDetail && !detail->getDontDraw() &&
-                    !drawnByGame(detail, objectLayer);
+                auto const detailHidden = separateDetail && !drawnByGame(detail, objectLayer);
                 if (!mainHidden && !detailHidden) return false;
 
                 // Picked-up coins and broken blocks are hidden by gameplay, not
@@ -223,11 +226,11 @@ namespace layoutfeed::hidden {
                 // drawing in sync while move triggers change their real
                 // position, so revealed parts go where the game has them.
                 auto const position = object->getPosition();
-                auto const base = CCAffineTransformMake(
-                    1.f, 0.f, 0.f, 1.f,
+                m_shift = {
                     static_cast<float>(object->m_positionX) - position.x,
-                    static_cast<float>(object->m_positionY) - position.y
-                );
+                    static_cast<float>(object->m_positionY) - position.y,
+                };
+                auto const base = CCAffineTransformMake(1.f, 0.f, 0.f, 1.f, m_shift.x, m_shift.y);
                 if (mainHidden) {
                     appendSprite(object, base, roles::revealColor(object, false));
                     appendChildren(object, object, CCAffineTransformConcat(object->nodeToParentTransform(), base), 0);
@@ -251,12 +254,33 @@ namespace layoutfeed::hidden {
             // transform; cocos2d keeps the texture coordinates of invisible
             // sprites, only their positions are zeroed.
             void appendSprite(CCSprite* sprite, CCAffineTransform const& parent, ccColor3B const& color) {
-                // DontDraw (a RobTop addition to CCSprite) marks sprites the
-                // game never shows, such as the frame of composite objects
-                // like spike slopes whose art is in their children.
-                if (sprite->getDontDraw()) return;
                 auto* texture = sprite->getTexture();
                 if (!texture) return;
+
+                // DontDraw (a RobTop addition to CCSprite): GD skips the cocos2d
+                // transform and writes the geometry of these sprites itself
+                // (saws, slopes). Their quad is already in object-layer space;
+                // rebuilding it from the node transform drew slopes rotated by
+                // 90 degrees. Without a batch the quad is local and unusable.
+                if (sprite->getDontDraw()) {
+                    if (!sprite->m_pobBatchNode) return;
+                    auto const& quad = sprite->m_sQuad;
+                    if (collapsedQuad(quad)) return;
+                    auto const vertex = [&](ccV3F_C4B_T2F const& source) {
+                        return ccV3F_C4B_T2F{
+                            vertex3(source.vertices.x + m_shift.x, source.vertices.y + m_shift.y, 0.f),
+                            ccc4(color.r, color.g, color.b, 255),
+                            source.texCoords,
+                        };
+                    };
+                    auto const bl = vertex(quad.bl);
+                    auto const br = vertex(quad.br);
+                    auto const tl = vertex(quad.tl);
+                    auto const tr = vertex(quad.tr);
+                    auto& vertices = verticesFor(texture);
+                    vertices.insert(vertices.end(), {bl, br, tl, tl, br, tr});
+                    return;
+                }
 
                 auto const transform = CCAffineTransformConcat(sprite->nodeToParentTransform(), parent);
                 auto const& rect = sprite->getTextureRect();
@@ -317,6 +341,7 @@ namespace layoutfeed::hidden {
             }
 
             GJBaseGameLayer* m_layer;
+            CCPoint m_shift{};
             std::vector<GameObject*> m_candidates;
             Clock::time_point m_lastRefresh{};
             std::vector<std::pair<CCTexture2D*, std::vector<ccV3F_C4B_T2F>>> m_batches;
@@ -361,12 +386,13 @@ namespace layoutfeed::hidden {
 
         std::string describeSprite(CCSprite* sprite, CCNode* objectLayer) {
             if (!sprite) return "none";
+            auto const* atlas = atlasQuad(sprite);
             return fmt::format(
-                "{} role={} vis={} chain={} op={} dontDraw={} quad={} at={}",
+                "{} role={} vis={} chain={} op={} dontDraw={} quad={} atlas={} at={}",
                 className(sprite), roleName(roles::resolve(sprite)), sprite->isVisible(),
                 visibleChain(sprite, objectLayer), static_cast<int>(sprite->getOpacity()),
-                sprite->getDontDraw(), sprite->m_pobBatchNode ? (collapsed(sprite) ? "collapsed" : "ok") : "own",
-                placement(sprite)
+                sprite->getDontDraw(), collapsedQuad(sprite->m_sQuad) ? "collapsed" : "ok",
+                atlas ? (collapsedQuad(*atlas) ? "collapsed" : "ok") : "none", placement(sprite)
             );
         }
     }

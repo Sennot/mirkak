@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.0.4
+- Fixed invisible saws with hitboxes (and other objects GD positions itself, such as slopes):
+  sprites flagged DontDraw are now revealed from the geometry GD wrote for them, with the correct
+  rotation, instead of being skipped. Whether the game draws a sprite is judged from the quad in
+  the batch atlas, i.e. what the GPU actually receives.
+- Object dumps also show the atlas quad state.
+
 ## v2.0.3
 - New option "Show animated decoration" (on by default): decoration that GD rotates or animates,
   such as decorative saws and gears, stays on screen in Layout Mode. Object dumps showed that the

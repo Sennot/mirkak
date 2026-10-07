@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.21)
 
-project(Spout2LayoutFeed VERSION 2.0.3 LANGUAGES CXX)
+project(Spout2LayoutFeed VERSION 2.0.4 LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 23)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
