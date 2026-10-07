@@ -39,6 +39,9 @@ namespace layoutfeed::debug {
         std::uint32_t objectsRevealed = 0;
         std::uint32_t revealCandidates = 0;
         std::uint32_t effectsSkipped = 0;
+        std::uint64_t containerSpritesNormal = 0;
+        std::uint64_t containerSpritesLayout = 0;
+        std::uint32_t containerFallbacks = 0;
         std::uint32_t fallbackDraws = 0;
     };
 

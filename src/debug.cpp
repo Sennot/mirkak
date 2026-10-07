@@ -221,6 +221,12 @@ namespace layoutfeed::debug {
                 c.flagRebuilds, c.flagReuses,
                 flagTotal ? 100.0 * c.flagReuses / flagTotal : 0.0, c.fallbackDraws
             );
+            log::info(
+                "[stats]   special layers per frame: {:.1f} sprites in the normal frame, {:.1f} in layout, "
+                "{:.1f} containers redrawn by the layout pass",
+                static_cast<double>(c.containerSpritesNormal) / frames,
+                static_cast<double>(c.containerSpritesLayout) / frames, c.containerFallbacks / frames
+            );
             auto const spriteTotal = c.spritesResolved + c.spritesReused;
             log::info(
                 "[stats]   rebuilt sprites: {} roles resolved, {} reused ({:.1f}% reused)",

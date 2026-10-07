@@ -7,6 +7,7 @@
 
 #include <Geode/Geode.hpp>
 #include <Geode/modify/CCCircleWave.hpp>
+#include <Geode/modify/CCNodeContainer.hpp>
 #include <Geode/modify/CCParticleSystemQuad.hpp>
 #include <Geode/modify/CCSprite.hpp>
 #include <Geode/modify/CCSpriteBatchNode.hpp>
@@ -23,6 +24,13 @@ using namespace geode::prelude;
 // (menus, the editor and the normal frame that goes to Spout2) they forward
 // to the original function after a single boolean check.
 namespace layoutfeed {
+    namespace {
+        // Sprites drawn through CCSprite::draw (outside batch nodes), counted
+        // so the special-layer containers can tell whether they drew anything.
+        std::uint64_t s_spriteDraws = 0;
+        unsigned s_containerDepth = 0;
+    }
+
     class $modify(LayoutBatchNode, CCSpriteBatchNode) {
         void draw() override {
             if (!pass::active()) {
@@ -52,10 +60,13 @@ namespace layoutfeed {
     // draw themselves. Their quad colors are swapped for this draw only.
     class $modify(LayoutSprite, CCSprite) {
         void draw() override {
+            ++s_spriteDraws;
             if (!pass::active() || m_pobBatchNode) {
+                if (s_containerDepth && !m_pobBatchNode) ++debug::counters().containerSpritesNormal;
                 CCSprite::draw();
                 return;
             }
+            if (s_containerDepth) ++debug::counters().containerSpritesLayout;
 
             auto const role = roles::resolve(this);
             if (role == roles::Role::Keep) {
@@ -102,6 +113,42 @@ namespace layoutfeed {
             CCSprite::draw();
             for (std::size_t i = 0; i < vertices.size(); ++i) vertices[i]->colors = saved[i];
             ++debug::counters().spritesTinted;
+        }
+    };
+
+    // GD keeps animated and rotating objects (saws, some structures) in
+    // CCNodeContainer special layers with their own visit(). In the second,
+    // screen-only pass of a frame that visit drew nothing, so these objects
+    // vanished in Layout Mode while OBS showed them. When it draws nothing
+    // although it has visible children, the children are visited the
+    // standard cocos2d way, which goes through the layout roles above.
+    class $modify(LayoutNodeContainer, CCNodeContainer) {
+        void visit() override {
+            struct Depth {
+                Depth() { ++s_containerDepth; }
+                ~Depth() { --s_containerDepth; }
+            } depth;
+
+            if (!pass::active()) {
+                CCNodeContainer::visit();
+                return;
+            }
+
+            auto const before = s_spriteDraws;
+            CCNodeContainer::visit();
+            if (s_spriteDraws != before || !isVisible() || !hasVisibleChild()) return;
+
+            ++debug::counters().containerFallbacks;
+            CCNode::visit();
+        }
+
+        bool hasVisibleChild() {
+            auto* children = getChildren();
+            if (!children) return false;
+            for (auto* child : CCArrayExt<CCNode*>(children)) {
+                if (child && child->isVisible()) return true;
+            }
+            return false;
         }
     };
 

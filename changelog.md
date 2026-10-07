@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.1
+- Fixed saws and other animated or rotating objects (GD special layers) vanishing in Layout Mode:
+  when a special-layer container draws nothing in the screen-only pass, its children are drawn
+  through the layout roles instead.
+- Debug statistics for special-layer sprites in the normal frame and in the layout pass.
+
 ## v2.0.0
 - Invisible levels: objects are revealed whenever the game would not actually draw them (hidden
   parent, collapsed quad, Hide option, alpha 0), including composite objects and detail sprites
