@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.5
+- Saws and slopes with hitboxes hidden by alpha: their DontDraw sprites are not in the batch atlas
+  (GD draws them itself), so the layout shader could not make them opaque. They now count as
+  drawn only when fully opaque and visible; otherwise they are rebuilt from GD's geometry.
+- Dumps show batch, atlas index, descendant membership and quad position of every sprite.
+
 ## v2.0.4
 - Fixed invisible saws with hitboxes (and other objects GD positions itself, such as slopes):
   sprites flagged DontDraw are now revealed from the geometry GD wrote for them, with the correct

@@ -133,6 +133,12 @@ namespace layoutfeed::hidden {
         bool drawnByGame(CCSprite* sprite, CCNode* objectLayer) {
             if (!sprite->getParent()) return false;
             if (!visibleChain(sprite, objectLayer)) return false;
+            if (sprite->getDontDraw()) {
+                // GD draws DontDraw sprites itself, outside the batch atlas
+                // (dumps: no atlas quad), so the layout shader cannot force
+                // their opacity. They count as drawn only when fully opaque.
+                return std::min(sprite->getOpacity(), sprite->getDisplayedOpacity()) >= 255;
+            }
             return !(sprite->m_pobBatchNode && collapsed(sprite));
         }
 
@@ -263,12 +269,18 @@ namespace layoutfeed::hidden {
                 // rebuilding it from the node transform drew slopes rotated by
                 // 90 degrees. Without a batch the quad is local and unusable.
                 if (sprite->getDontDraw()) {
-                    if (!sprite->m_pobBatchNode) return;
                     auto const& quad = sprite->m_sQuad;
                     if (collapsedQuad(quad)) return;
+                    // A batched sprite's quad is in batch (object-layer) space;
+                    // without a batch cocos2d keeps it in local space.
+                    auto const local = !sprite->m_pobBatchNode;
+                    auto const toLayer = CCAffineTransformConcat(sprite->nodeToParentTransform(), parent);
                     auto const vertex = [&](ccV3F_C4B_T2F const& source) {
+                        auto point = CCPoint{source.vertices.x, source.vertices.y};
+                        point = local ? CCPointApplyAffineTransform(point, toLayer)
+                                      : CCPoint{point.x + m_shift.x, point.y + m_shift.y};
                         return ccV3F_C4B_T2F{
-                            vertex3(source.vertices.x + m_shift.x, source.vertices.y + m_shift.y, 0.f),
+                            vertex3(point.x, point.y, 0.f),
                             ccc4(color.r, color.g, color.b, 255),
                             source.texCoords,
                         };
@@ -387,12 +399,22 @@ namespace layoutfeed::hidden {
         std::string describeSprite(CCSprite* sprite, CCNode* objectLayer) {
             if (!sprite) return "none";
             auto const* atlas = atlasQuad(sprite);
+            auto* batch = sprite->m_pobBatchNode;
+            auto inDescendants = false;
+            if (batch && batch->getDescendants()) {
+                inDescendants = batch->getDescendants()->indexOfObject(sprite) != CC_INVALID_INDEX;
+            }
+            auto const& quad = sprite->m_sQuad;
             return fmt::format(
-                "{} role={} vis={} chain={} op={} dontDraw={} quad={} atlas={} at={}",
+                "{} role={} vis={} chain={} op={}/{} dontDraw={} quad={} atlas={} batch={} idx={} desc={} "
+                "quadBL=({:.0f},{:.0f}) at={}",
                 className(sprite), roleName(roles::resolve(sprite)), sprite->isVisible(),
                 visibleChain(sprite, objectLayer), static_cast<int>(sprite->getOpacity()),
-                sprite->getDontDraw(), collapsedQuad(sprite->m_sQuad) ? "collapsed" : "ok",
-                atlas ? (collapsedQuad(*atlas) ? "collapsed" : "ok") : "none", placement(sprite)
+                static_cast<int>(sprite->getDisplayedOpacity()), sprite->getDontDraw(),
+                collapsedQuad(quad) ? "collapsed" : "ok",
+                atlas ? (collapsedQuad(*atlas) ? "collapsed" : "ok") : "none", batch != nullptr,
+                static_cast<long long>(static_cast<int>(sprite->m_uAtlasIndex)), inDescendants,
+                quad.bl.vertices.x, quad.bl.vertices.y, placement(sprite)
             );
         }
     }
@@ -443,11 +465,11 @@ namespace layoutfeed::hidden {
                 }
             }
             log::info(
-                "[dump] id={} x{} type={} class={} candidate={} decoHidden={}/{} notDrawn={}/{} "
+                "[dump] id={} x{} type={} class={} pos=({:.0f},{:.0f}) candidate={} decoHidden={}/{} notDrawn={}/{} "
                 "hide={} groupOff={} noTouch={} | main: {} | detail: {} (child={}) | glow: {} | "
                 "children={} first: {}",
                 id, kind.count, static_cast<int>(object->m_objectType), className(object),
-                candidate(object), kind.hiddenDecoration, kind.count, kind.notDrawn, kind.count,
+                object->m_positionX, object->m_positionY, candidate(object), kind.hiddenDecoration, kind.count, kind.notDrawn, kind.count,
                 object->m_isHide, object->m_isGroupDisabled, object->m_isNoTouch,
                 describeSprite(object, objectLayer), describeSprite(object->m_colorSprite, objectLayer),
                 object->m_colorSprite && object->m_colorSprite->getParent() == object,
