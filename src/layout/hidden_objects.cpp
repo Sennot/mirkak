@@ -88,12 +88,14 @@ namespace layoutfeed::hidden {
             // all is rebuilt here.
             auto const visible = object->isVisible();
             auto const active = object->getParent() != nullptr;
-            // DontDraw (a RobTop addition to CCSprite) skips drawing while the
-            // object still counts as visible and active.
-            // Opacity 0 is included as well: GD may skip such quads entirely.
-            // If the batch still draws the object, both draws are identical.
-            auto const hidden = object->m_isHide || !visible || !active || object->getDontDraw() ||
-                object->getOpacity() == 0;
+            // Opacity 0 counts only when GD also dropped the quad (cocos2d
+            // collapses it to a point); a quad that still exists is revealed
+            // by the layout shader in place, with the game's exact geometry.
+            auto const& quad = object->m_sQuad;
+            auto const collapsed = quad.bl.vertices.x == quad.tr.vertices.x &&
+                quad.bl.vertices.y == quad.tr.vertices.y;
+            auto const hidden = object->m_isHide || !visible || !active ||
+                (object->getOpacity() == 0 && collapsed);
             if (!hidden) return false;
 
             // GD keeps every object in view active. An inactive object is only
@@ -167,6 +169,11 @@ namespace layoutfeed::hidden {
             // transform; cocos2d keeps the texture coordinates of invisible
             // sprites, only their positions are zeroed.
             void appendSprite(CCSprite* sprite, CCAffineTransform const& parent, ccColor3B const& color) {
+                // DontDraw (a RobTop addition to CCSprite) marks sprites the
+                // game never shows, such as the frame of composite objects
+                // like spike slopes whose art is in their children. Drawing it
+                // put a rotated placeholder over the real object.
+                if (sprite->getDontDraw()) return;
                 auto* texture = sprite->getTexture();
                 if (!texture) return;
 
