@@ -6,9 +6,14 @@
 #include "../debug.hpp"
 #include "../settings.hpp"
 
+#include <fmt/format.h>
+
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <map>
+#include <string>
+#include <typeinfo>
 #include <utility>
 #include <vector>
 
@@ -315,6 +320,112 @@ namespace layoutfeed::hidden {
         };
 
         WeakRef<RevealNode> s_node;
+        bool s_dumpRequested = false;
+
+        char const* roleName(roles::Role role) {
+            switch (role) {
+                case roles::Role::Keep: return "keep";
+                case roles::Role::Hide: return "HIDE";
+                case roles::Role::Main: return "main";
+                case roles::Role::Detail: return "detail";
+                case roles::Role::Opaque: return "opaque";
+            }
+            return "?";
+        }
+
+        std::string className(CCNode* node) {
+            if (!node) return "null";
+            std::string name = typeid(*node).name();
+            for (auto const prefix : {"class ", "struct "}) {
+                if (name.rfind(prefix, 0) == 0) name.erase(0, std::char_traits<char>::length(prefix));
+            }
+            return name;
+        }
+
+        // Where a sprite sits and how the layout pass treats that place.
+        std::string placement(CCSprite* sprite) {
+            auto* parent = sprite->getParent();
+            if (!parent) return "inactive";
+            if (auto* batch = typeinfo_cast<CCSpriteBatchNode*>(parent)) {
+                switch (pass::classify(batch)) {
+                    case pass::BatchKind::Object: return "batch:object";
+                    case pass::BatchKind::Glow: return "batch:glow";
+                    case pass::BatchKind::Other: return "batch:other";
+                }
+            }
+            return className(parent);
+        }
+
+        std::string describeSprite(CCSprite* sprite, CCNode* objectLayer) {
+            if (!sprite) return "none";
+            return fmt::format(
+                "{} role={} vis={} chain={} op={} dontDraw={} quad={} at={}",
+                className(sprite), roleName(roles::resolve(sprite)), sprite->isVisible(),
+                visibleChain(sprite, objectLayer), static_cast<int>(sprite->getOpacity()),
+                sprite->getDontDraw(), sprite->m_pobBatchNode ? (collapsed(sprite) ? "collapsed" : "ok") : "own",
+                placement(sprite)
+            );
+        }
+    }
+
+    void requestDump() {
+        s_dumpRequested = true;
+        log::info("[dump] object dump requested for the next layout frame");
+    }
+
+    void dumpIfRequested(GJBaseGameLayer* layer) {
+        if (!s_dumpRequested || !layer || !layer->m_objectLayer) return;
+        s_dumpRequested = false;
+
+        struct Kind {
+            GameObject* sample = nullptr;
+            int count = 0;
+            int hiddenDecoration = 0;
+            int notDrawn = 0;
+        };
+        std::map<int, Kind> kinds;
+        auto* objectLayer = layer->m_objectLayer;
+        auto const area = visibleArea(layer);
+        forEachObjectOnScreen(layer, [&](GameObject* object) {
+            if (!object || object->m_isTrigger) return;
+            if (!area.containsPoint({static_cast<float>(object->m_positionX), static_cast<float>(object->m_positionY)})) {
+                return;
+            }
+            auto& kind = kinds[object->m_objectID];
+            if (!kind.sample) kind.sample = object;
+            ++kind.count;
+            if (roles::hiddenInLayout(object)) ++kind.hiddenDecoration;
+            if (!objectDrawnByGame(object, objectLayer)) ++kind.notDrawn;
+        });
+
+        log::info("[dump] {} object kinds on screen", kinds.size());
+        auto lines = 0;
+        for (auto const& [id, kind] : kinds) {
+            if (++lines > 150) {
+                log::info("[dump] ... {} more kinds omitted", kinds.size() - 150);
+                break;
+            }
+            auto* object = kind.sample;
+            auto childCount = object->getChildrenCount();
+            CCSprite* firstChild = nullptr;
+            if (auto* children = object->getChildren()) {
+                for (auto* child : CCArrayExt<CCNode*>(children)) {
+                    if ((firstChild = typeinfo_cast<CCSprite*>(child))) break;
+                }
+            }
+            log::info(
+                "[dump] id={} x{} type={} class={} candidate={} decoHidden={}/{} notDrawn={}/{} "
+                "hide={} groupOff={} noTouch={} | main: {} | detail: {} (child={}) | glow: {} | "
+                "children={} first: {}",
+                id, kind.count, static_cast<int>(object->m_objectType), className(object),
+                candidate(object), kind.hiddenDecoration, kind.count, kind.notDrawn, kind.count,
+                object->m_isHide, object->m_isGroupDisabled, object->m_isNoTouch,
+                describeSprite(object, objectLayer), describeSprite(object->m_colorSprite, objectLayer),
+                object->m_colorSprite && object->m_colorSprite->getParent() == object,
+                describeSprite(object->m_glowSprite, objectLayer), childCount,
+                describeSprite(firstChild, objectLayer)
+            );
+        }
     }
 
     void attach(GJBaseGameLayer* layer) {

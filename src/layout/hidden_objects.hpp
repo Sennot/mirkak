@@ -10,4 +10,9 @@ namespace layoutfeed::hidden {
     // transforms during the layout pass only.
     void attach(GJBaseGameLayer* layer);
     void detach();
+
+    // Debug: logs how every kind of object on screen is classified and drawn
+    // in the next layout frame (bound to a keybind).
+    void requestDump();
+    void dumpIfRequested(GJBaseGameLayer* layer);
 }

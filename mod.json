@@ -5,7 +5,7 @@
   },
   "id": "halil.spout2-layout-feed",
   "name": "Spout2 Layout Feed",
-  "version": "v2.0.1",
+  "version": "v2.0.2",
   "developer": "halil",
   "description": "Plays levels in Layout Mode on your screen while OBS receives the normal, fully decorated level through Spout2.",
   "tags": ["gameplay", "utility"],
@@ -169,6 +169,13 @@
       "name": "Debug logging",
       "description": "Writes detailed diagnostics to the Geode log: OpenGL driver info, Spout2 share mode, per-level object statistics, OpenGL errors and periodic CPU/GPU timings.",
       "default": false
+    },
+    "debug-dump-keybind": {
+      "type": "keybind",
+      "name": "Dump objects on screen",
+      "description": "Writes how every kind of object on screen is classified and drawn by Layout Mode to the log. Press it while a missing object should be visible.",
+      "default": "F8",
+      "category": "universal"
     },
     "debug-stats-interval": {
       "type": "int",

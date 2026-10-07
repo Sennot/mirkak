@@ -6,6 +6,8 @@
 #include <Geode/cocos/platform/win32/CCGL.h>
 
 #include <array>
+#include <initializer_list>
+#include <optional>
 #include <string>
 
 using namespace geode::prelude;
@@ -177,11 +179,13 @@ void main() {
             return true;
         }
 
-        // Draws the overlay texture with premultiplied-alpha blending into the
-        // currently bound draw framebuffer. Raw GL with full save/restore: the
-        // menus that ran before may have left state the cocos2d cache does not
-        // know about, so the cache is neither trusted nor changed here.
-        void composite() {
+        // Draws the overlay texture with premultiplied-alpha blending into each
+        // given framebuffer. Raw GL with full save/restore: the menus that ran
+        // before may have left state the cocos2d cache does not know about,
+        // so the cache is neither trusted nor changed here. State is queried
+        // once for all targets: every glGet* makes the CPU wait for NVIDIA's
+        // threaded driver, so queries are kept to a minimum.
+        void compositeInto(std::initializer_list<GLuint> framebuffers) {
             GLint program = 0, activeTexture = 0, texture = 0, vertexArray = 0, arrayBuffer = 0;
             GLint blendSrcRgb = 0, blendDstRgb = 0, blendSrcAlpha = 0, blendDstAlpha = 0;
             GLint viewport[4]{};
@@ -217,7 +221,11 @@ void main() {
             glDisable(GL_SCISSOR_TEST);
             glDisable(GL_DEPTH_TEST);
             glDisable(GL_CULL_FACE);
-            glDrawArrays(GL_TRIANGLES, 0, 3);
+            for (auto const framebuffer : framebuffers) {
+                glBindFramebuffer(GL_FRAMEBUFFER, framebuffer);
+                glDrawBuffer(framebuffer ? GL_COLOR_ATTACHMENT0 : GL_BACK);
+                glDrawArrays(GL_TRIANGLES, 0, 3);
+            }
 
             for (GLuint index = 0; index < attributes.size(); ++index) {
                 if (attributes[index]) glEnableVertexAttribArray(index);
@@ -306,6 +314,8 @@ void main() {
     void finish() {
         if (!s_redirecting) return;
         s_redirecting = false;
+        std::optional<debug::CpuScope> timer;
+        timer.emplace(debug::Timer::Overlay);
 
         if (s_method == Method::DefaultAlpha) {
             // The back buffer holds only what menus and overlays drew, with
@@ -331,14 +341,11 @@ void main() {
             }
         }
 
-        // Monitor: layout + menus.
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glDrawBuffer(GL_BACK);
-        composite();
-
-        // OBS: normal frame + menus, sent from the copy.
+        // Monitor (default framebuffer): layout + menus. OBS (the copy of the
+        // normal frame): normal frame + menus, sent to Spout2 from the copy.
+        compositeInto({0u, s_normal.fbo});
         glBindFramebuffer(GL_FRAMEBUFFER, s_normal.fbo);
-        composite();
+        timer.reset();
         {
             debug::CpuScope cpu(debug::Timer::Spout);
             debug::GpuScope gpu(debug::Timer::Spout);

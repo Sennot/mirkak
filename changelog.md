@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.0.2
+- Fewer OpenGL state queries when compositing mod menus (one save/restore for both outputs);
+  each query stalls on NVIDIA's threaded driver.
+- Debug: "Dump objects on screen" keybind (F8) logs how every kind of object on screen is
+  classified and drawn, and the menu compositing cost appears in the statistics.
+
 ## v2.0.1
 - Fixed saws and other animated or rotating objects (GD special layers) vanishing in Layout Mode:
   when a special-layer container draws nothing in the screen-only pass, its children are drawn

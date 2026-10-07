@@ -19,6 +19,7 @@ namespace layoutfeed::debug {
     enum class Timer : std::uint8_t {
         Spout,
         Layout,
+        Overlay,
         Count,
     };
 

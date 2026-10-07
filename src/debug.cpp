@@ -21,6 +21,7 @@ namespace layoutfeed::debug {
             switch (static_cast<Timer>(index)) {
                 case Timer::Spout: return "spout";
                 case Timer::Layout: return "layout";
+                case Timer::Overlay: return "menus";
                 default: return "?";
             }
         }

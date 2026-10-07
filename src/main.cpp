@@ -4,6 +4,7 @@
 #include <Geode/modify/CCEGLView.hpp>
 
 #include "debug.hpp"
+#include "layout/hidden_objects.hpp"
 #include "layout/layout_pass.hpp"
 #include "overlay_capture.hpp"
 #include "present_hook.hpp"
@@ -145,6 +146,13 @@ $on_game(Loaded) {
             auto const enabled = !mod->getSettingValue<bool>("layout-enabled");
             mod->setSettingValue<bool>("layout-enabled", enabled);
             log::info("Layout Mode {} by keybind", enabled ? "enabled" : "disabled");
+        }
+    );
+
+    listenForKeybindSettingPresses(
+        "debug-dump-keybind",
+        [](Keybind const&, bool down, bool repeat, double) {
+            if (down && !repeat) layoutfeed::hidden::requestDump();
         }
     );
 }

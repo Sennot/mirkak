@@ -1,5 +1,7 @@
 #include "layout_pass.hpp"
 
+#include "hidden_objects.hpp"
+
 #include "layout_renderer.hpp"
 #include "object_roles.hpp"
 #include "../debug.hpp"
@@ -236,6 +238,7 @@ namespace layoutfeed::pass {
         scene->visit();
         if (auto* notifications = director->getNotificationNode()) notifications->visit();
         kmGLPopMatrix();
+        hidden::dumpIfRequested(layer);
 
         ++debug::counters().layoutFrames;
         ++s_levelPasses;
