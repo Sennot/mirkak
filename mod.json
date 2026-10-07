@@ -5,7 +5,7 @@
   },
   "id": "halil.spout2-layout-feed",
   "name": "Spout2 Layout Feed",
-  "version": "v1.5.0",
+  "version": "v1.6.0",
   "developer": "halil",
   "description": "Plays levels in Layout Mode on your screen while OBS receives the normal, fully decorated level through Spout2.",
   "tags": ["gameplay", "utility"],

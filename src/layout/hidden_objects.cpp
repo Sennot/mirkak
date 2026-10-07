@@ -65,7 +65,8 @@ namespace layoutfeed::hidden {
                 minY = std::min(minY, point.y);
                 maxY = std::max(maxY, point.y);
             }
-            constexpr float margin = 60.f;
+            // Large objects can reach into view from far outside it.
+            auto const margin = 60.f + 0.25f * std::max(maxX - minX, maxY - minY);
             return {minX - margin, minY - margin, maxX - minX + margin * 2.f, maxY - minY + margin * 2.f};
         }
 
@@ -82,12 +83,17 @@ namespace layoutfeed::hidden {
                 return false;
             }
 
-            // Objects that are drawn but transparent are already revealed by
-            // the layout shader (forced opacity); only geometry GD does not
-            // draw at all is rebuilt here.
+            // Objects that are drawn but partly transparent are revealed by
+            // the layout shader (forced opacity); geometry GD may not draw at
+            // all is rebuilt here.
             auto const visible = object->isVisible();
             auto const active = object->getParent() != nullptr;
-            auto const hidden = object->m_isHide || !visible || !active;
+            // DontDraw (a RobTop addition to CCSprite) skips drawing while the
+            // object still counts as visible and active.
+            // Opacity 0 is included as well: GD may skip such quads entirely.
+            // If the batch still draws the object, both draws are identical.
+            auto const hidden = object->m_isHide || !visible || !active || object->getDontDraw() ||
+                object->getOpacity() == 0;
             if (!hidden) return false;
 
             // GD keeps every object in view active. An inactive object is only
@@ -192,35 +198,36 @@ namespace layoutfeed::hidden {
             }
 
             void appendChildren(GameObject* owner, CCNode* node, CCAffineTransform const& transform, int depth) {
-                if (depth > 2) return;
+                if (depth > 3) return;
                 auto* children = node->getChildren();
                 if (!children) return;
                 for (auto* child : CCArrayExt<CCNode*>(children)) {
-                    auto* sprite = typeinfo_cast<CCSprite*>(child);
-                    if (!sprite) continue;
-                    auto const detail = sprite == owner->m_colorSprite;
-                    if (!detail && !sprite->isVisible()) continue;
-                    appendSprite(sprite, transform, roles::revealColor(owner, detail));
-                    auto const childTransform = CCAffineTransformConcat(sprite->nodeToParentTransform(), transform);
-                    appendChildren(owner, sprite, childTransform, depth + 1);
+                    if (!child) continue;
+                    auto const detail = child == owner->m_colorSprite;
+                    if (!detail && !child->isVisible()) continue;
+                    // Non-sprite children are walked through as well: text
+                    // objects keep their letters in a label batch node.
+                    if (auto* sprite = typeinfo_cast<CCSprite*>(child)) {
+                        appendSprite(sprite, transform, roles::revealColor(owner, detail));
+                    }
+                    auto const childTransform = CCAffineTransformConcat(child->nodeToParentTransform(), transform);
+                    appendChildren(owner, child, childTransform, depth + 1);
                 }
             }
 
             void appendObject(GameObject* object) {
                 // Object batches sit at the origin of the object layer, so the
                 // object's own transform is its object-layer transform. GD
-                // stops updating the node position of inactive objects while
-                // move triggers keep changing their real position, so those
-                // are shifted to where the game currently has them.
-                auto base = CCAffineTransformMakeIdentity();
-                if (!object->getParent()) {
-                    auto const position = object->getPosition();
-                    base = CCAffineTransformMake(
-                        1.f, 0.f, 0.f, 1.f,
-                        static_cast<float>(object->m_positionX) - position.x,
-                        static_cast<float>(object->m_positionY) - position.y
-                    );
-                }
+                // does not keep the node position of objects it is not
+                // drawing in sync while move triggers change their real
+                // position, so revealed objects are shifted to where the game
+                // currently has them.
+                auto const position = object->getPosition();
+                auto const base = CCAffineTransformMake(
+                    1.f, 0.f, 0.f, 1.f,
+                    static_cast<float>(object->m_positionX) - position.x,
+                    static_cast<float>(object->m_positionY) - position.y
+                );
                 appendSprite(object, base, roles::revealColor(object, false));
                 appendChildren(object, object, CCAffineTransformConcat(object->nodeToParentTransform(), base), 0);
 

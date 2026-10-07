@@ -243,6 +243,11 @@ namespace layoutfeed::roles {
         return toRole(bits);
     }
 
+    bool isLevelObject(CCNode* node) {
+        auto const* entry = lookup(node);
+        return entry && entry->origin == Origin::Object;
+    }
+
     bool hiddenInLayout(GameObject* object) {
         return settings::hideDecoration() && isDecoration(object);
     }

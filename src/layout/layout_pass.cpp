@@ -188,11 +188,14 @@ namespace layoutfeed::pass {
         if (std::binary_search(s_sets.objects.begin(), s_sets.objects.end(), key)) {
             return BatchKind::Object;
         }
-        void const* parent = batch->getParent();
+        auto* parentNode = batch->getParent();
+        void const* parent = parentNode;
         if (parent && std::find(s_sets.objectLayers.begin(), s_sets.objectLayers.end(), parent) !=
                 s_sets.objectLayers.end()) {
             return BatchKind::Object;
         }
+        // Letters of text objects live in a label batch owned by the object.
+        if (parentNode && roles::isLevelObject(parentNode)) return BatchKind::Object;
         return BatchKind::Other;
     }
 

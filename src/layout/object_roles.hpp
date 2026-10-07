@@ -28,6 +28,9 @@ namespace layoutfeed::roles {
     // every hit is re-validated so reused sprite addresses never keep a role.
     Role resolve(cocos2d::CCNode* sprite);
 
+    // A registered level object (cheap lookup, no classification).
+    bool isLevelObject(cocos2d::CCNode* node);
+
     // Decoration hidden by the current settings.
     bool hiddenInLayout(GameObject* object);
 
