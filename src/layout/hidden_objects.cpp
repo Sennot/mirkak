@@ -88,8 +88,11 @@ namespace layoutfeed::hidden {
         bool candidate(GameObject* object) {
             if (!object || object->m_isTrigger || object->m_isStartPos || object->m_isUIObject) return false;
             auto const type = object->m_objectType;
-            if (type == GameObjectType::Decoration || type == GameObjectType::CollisionObject ||
-                type == GameObjectType::EnterEffectObject) {
+            if (type == GameObjectType::CollisionObject || type == GameObjectType::EnterEffectObject) return false;
+            // Cheap type check first; only decoration that may be kept
+            // (animated decoration, or decoration shown at all) is looked up.
+            if (type == GameObjectType::Decoration && settings::hideDecoration() &&
+                !settings::showAnimatedDecoration()) {
                 return false;
             }
             return !roles::hiddenInLayout(object);

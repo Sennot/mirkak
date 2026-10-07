@@ -64,6 +64,7 @@ Geode-мод для Geometry Dash 2.2081 (Windows, Geode 5.8.2).
 | Include Steam overlay (experimental) | выкл | Захват на present драйвера OpenGL, после Steam/RivaTuner/старого Discord-оверлея (как в clean-feed моде). Если хук драйвера не срабатывает, мод сам возвращается к обычному захвату |
 | Enable Layout Mode | вкл | Layout Mode на экране. Переключается клавишей **F6** |
 | Hide decoration | вкл | Скрывает декорации и no-touch объекты (тот же список ID, что в GDH) |
+| Show animated decoration | вкл | Вращающаяся и анимированная декорация (декоративные пилы, шестерёнки) остаётся на экране. Хитбокса у неё нет |
 | Remove object colors | вкл | Объекты рисуются цветами ниже вместо цветовых каналов |
 | Show invisible objects | вкл | Показывает объекты, скрытые альфа-триггерами, fade и опцией Hide |
 | Disable additive blending | вкл | Объекты на blending-каналах рисуются обычным смешиванием |

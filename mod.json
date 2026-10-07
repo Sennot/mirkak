@@ -5,7 +5,7 @@
   },
   "id": "halil.spout2-layout-feed",
   "name": "Spout2 Layout Feed",
-  "version": "v2.0.2",
+  "version": "v2.0.3",
   "developer": "halil",
   "description": "Plays levels in Layout Mode on your screen while OBS receives the normal, fully decorated level through Spout2.",
   "tags": ["gameplay", "utility"],
@@ -69,6 +69,13 @@
       "description": "Hides decoration and no-touch objects.",
       "default": true,
       "enable-if": "layout-enabled"
+    },
+    "layout-show-animated-decoration": {
+      "type": "bool",
+      "name": "Show animated decoration",
+      "description": "Keeps decoration that GD rotates or animates (decorative saws, gears, ...) on screen even when decoration is hidden. These objects have no hitbox.",
+      "default": true,
+      "enable-if": "layout-hide-decoration"
     },
     "layout-recolor-objects": {
       "type": "bool",

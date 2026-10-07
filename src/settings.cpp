@@ -17,6 +17,7 @@ namespace layoutfeed::settings {
 
             bool layoutEnabled = true;
             bool hideDecoration = true;
+            bool showAnimatedDecoration = true;
             bool recolorObjects = true;
             bool forceOpacity = true;
             bool normalBlending = true;
@@ -51,6 +52,7 @@ namespace layoutfeed::settings {
 
             value.layoutEnabled = mod->getSettingValue<bool>("layout-enabled");
             value.hideDecoration = mod->getSettingValue<bool>("layout-hide-decoration");
+            value.showAnimatedDecoration = mod->getSettingValue<bool>("layout-show-animated-decoration");
             value.recolorObjects = mod->getSettingValue<bool>("layout-recolor-objects");
             value.forceOpacity = mod->getSettingValue<bool>("layout-force-opacity");
             value.normalBlending = mod->getSettingValue<bool>("layout-normal-blending");
@@ -100,6 +102,7 @@ namespace layoutfeed::settings {
 
     bool layoutEnabled() { return cache().layoutEnabled; }
     bool hideDecoration() { return cache().hideDecoration; }
+    bool showAnimatedDecoration() { return cache().showAnimatedDecoration; }
     bool recolorObjects() { return cache().recolorObjects; }
     bool forceOpacity() { return cache().forceOpacity; }
     bool normalBlending() { return cache().normalBlending; }
@@ -127,11 +130,11 @@ namespace layoutfeed::settings {
     void logSummary() {
         auto const& value = cache();
         log::info(
-            "Settings: spout={} sender='{}' cursor={} menus={} steam={} | layout={} deco={} recolor={} opacity={} "
+            "Settings: spout={} sender='{}' cursor={} menus={} steam={} | layout={} deco={} animDeco={} recolor={} opacity={} "
             "blending={} glow={} particles={} effects={} mg={} shaders={} player={} | debug={} interval={}s gpuTimers={}",
             value.enabled, value.senderName, value.captureCursor, value.captureMenus,
             value.captureSystemOverlays,
-            value.layoutEnabled, value.hideDecoration, value.recolorObjects, value.forceOpacity,
+            value.layoutEnabled, value.hideDecoration, value.showAnimatedDecoration, value.recolorObjects, value.forceOpacity,
             value.normalBlending, value.hideGlow, value.hideParticles, value.hideEffects, value.hideMiddleground,
             value.disableShaders, value.alwaysShowPlayer, value.debugLogging, value.statsInterval, value.gpuTimers
         );

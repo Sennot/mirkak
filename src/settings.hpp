@@ -16,6 +16,7 @@ namespace layoutfeed::settings {
     // Layout Mode
     bool layoutEnabled();
     bool hideDecoration();
+    bool showAnimatedDecoration();
     bool recolorObjects();
     bool forceOpacity();
     bool normalBlending();

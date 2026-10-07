@@ -62,7 +62,10 @@ namespace layoutfeed::roles {
         // The part has no color channel (orbs, pads, portals, ...): its
         // vertex colors already are its default look, so they are kept.
         constexpr std::uint8_t kFixedColorBit = 0x40;
-        constexpr std::uint8_t kOwnerBits = kDecorationBit | kFixedColorBit;
+        // Decoration that GD animates or rotates (EnhancedGameObject): deco
+        // saws, gears and similar. It looks like gameplay, so it can be kept.
+        constexpr std::uint8_t kAnimatedDecorationBit = 0x20;
+        constexpr std::uint8_t kOwnerBits = kDecorationBit | kFixedColorBit | kAnimatedDecorationBit;
         constexpr std::uint8_t kPartMask = 0x0F;
 
         // How an entry is re-validated on every lookup. GD frees and creates
@@ -116,7 +119,11 @@ namespace layoutfeed::roles {
 
         std::uint8_t entryFor(GameObject* owner, Part part) {
             auto entry = static_cast<std::uint8_t>(part);
-            if (isDecoration(owner)) entry |= kDecorationBit;
+            if (isDecoration(owner)) {
+                entry |= kDecorationBit;
+                // One RTTI check per registered part, never per frame.
+                if (typeinfo_cast<EnhancedGameObject*>(owner)) entry |= kAnimatedDecorationBit;
+            }
             if (hasFixedColor(owner, part)) entry |= kFixedColorBit;
             return entry;
         }
@@ -170,10 +177,15 @@ namespace layoutfeed::roles {
             return nullptr;
         }
 
+        bool decorationHidden(std::uint8_t bits) {
+            if (!(bits & kDecorationBit) || !settings::hideDecoration()) return false;
+            return !((bits & kAnimatedDecorationBit) && settings::showAnimatedDecoration());
+        }
+
         Role toRole(std::uint8_t entry) {
             auto const part = entry & kPartMask;
             if (part == PartKeep) return Role::Keep;
-            if ((entry & kDecorationBit) && settings::hideDecoration()) return Role::Hide;
+            if (decorationHidden(entry)) return Role::Hide;
             // Only sprites registered as an object's glow are hidden. Glow
             // batch layers also hold other art (parts of portals and orbs),
             // which skipping whole layers used to remove.
@@ -269,7 +281,12 @@ namespace layoutfeed::roles {
     }
 
     bool hiddenInLayout(GameObject* object) {
-        return settings::hideDecoration() && isDecoration(object);
+        if (!settings::hideDecoration()) return false;
+        // Registered objects carry the answer in their entry (no RTTI).
+        if (auto const* entry = s_entries.find(object); entry && entry->origin == Origin::Object) {
+            return decorationHidden(entry->bits);
+        }
+        return decorationHidden(entryFor(object, PartMain));
     }
 
     ccColor3B revealColor(GameObject* owner, bool detail) {

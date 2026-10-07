@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.0.3
+- New option "Show animated decoration" (on by default): decoration that GD rotates or animates,
+  such as decorative saws and gears, stays on screen in Layout Mode. Object dumps showed that the
+  missing saws were decoration objects without hitboxes; no object with a hitbox was hidden.
+
 ## v2.0.2
 - Fewer OpenGL state queries when compositing mod menus (one save/restore for both outputs);
   each query stalls on NVIDIA's threaded driver.
