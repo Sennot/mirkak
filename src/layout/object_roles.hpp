@@ -22,6 +22,9 @@ namespace layoutfeed::roles {
 
     void registerObject(GameObject* object);
     void registerGlow(GameObject* object);
+    // Re-registers the detail and glow sprites of a level object; GD creates
+    // or replaces them when it activates the object.
+    void refreshParts(GameObject* object);
 
     // Resolves the role of a sprite drawn in the layout pass. Unknown sprites
     // are classified once (parent walk to a registered object) and cached;
@@ -39,8 +42,8 @@ namespace layoutfeed::roles {
     // color channel and keep their own art.
     cocos2d::ccColor3B revealColor(GameObject* owner, bool detail);
 
-    // Changes whenever a resolved role can differ from before: new sprites,
-    // or settings that affect the role mapping. Flag caches compare it.
+    // Changes whenever an already cached sprite gets a different role, so
+    // role masks that may contain it must be resolved again.
     std::uint32_t generation();
 
     void logSummary();

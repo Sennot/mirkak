@@ -208,16 +208,24 @@ namespace layoutfeed::debug {
             log::info(
                 "[stats]   layout per frame: {:.1f} object batches, {:.1f} glow batches, "
                 "{:.0f} quads drawn, {:.0f} quads hidden, {:.1f} sprites tinted, "
-                "{:.1f} sprites hidden, {:.1f} particle systems skipped, {:.1f} hidden objects revealed",
+                "{:.1f} sprites hidden, {:.1f} particle systems and {:.1f} effects skipped, "
+                "{:.1f} hidden objects revealed of {:.1f} gameplay objects in view",
                 c.objectBatchDraws / frames, c.glowBatches / frames,
                 c.quadsDrawn / frames, c.quadsHidden / frames, c.spritesTinted / frames,
-                c.spritesHidden / frames, c.particlesSkipped / frames, c.objectsRevealed / frames
+                c.spritesHidden / frames, c.particlesSkipped / frames, c.effectsSkipped / frames,
+                c.objectsRevealed / frames, c.revealCandidates / frames
             );
             auto const flagTotal = c.flagRebuilds + c.flagReuses;
             log::info(
                 "[stats]   role flags: {} rebuilds, {} reuses ({:.1f}% cached), {} fallback draws",
                 c.flagRebuilds, c.flagReuses,
                 flagTotal ? 100.0 * c.flagReuses / flagTotal : 0.0, c.fallbackDraws
+            );
+            auto const spriteTotal = c.spritesResolved + c.spritesReused;
+            log::info(
+                "[stats]   rebuilt sprites: {} roles resolved, {} reused ({:.1f}% reused)",
+                c.spritesResolved, c.spritesReused,
+                spriteTotal ? 100.0 * static_cast<double>(c.spritesReused) / static_cast<double>(spriteTotal) : 0.0
             );
         }
 

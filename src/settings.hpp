@@ -21,6 +21,7 @@ namespace layoutfeed::settings {
     bool normalBlending();
     bool hideGlow();
     bool hideParticles();
+    bool hideEffects();
     bool hideMiddleground();
     bool disableShaders();
     bool alwaysShowPlayer();

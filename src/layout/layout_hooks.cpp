@@ -6,6 +6,7 @@
 #include "../settings.hpp"
 
 #include <Geode/Geode.hpp>
+#include <Geode/modify/CCCircleWave.hpp>
 #include <Geode/modify/CCParticleSystemQuad.hpp>
 #include <Geode/modify/CCSprite.hpp>
 #include <Geode/modify/CCSpriteBatchNode.hpp>
@@ -164,6 +165,25 @@ namespace layoutfeed {
         void addGlow(gd::string frame) {
             GameObject::addGlow(frame);
             roles::registerGlow(this);
+        }
+
+        // GD creates or replaces detail and glow sprites when an object comes
+        // into view. Without this, detail sprites placed beside their object
+        // in a batch kept their level colors and opacity (invisible fills in
+        // invisible levels).
+        void activateObject() override {
+            GameObject::activateObject();
+            roles::refreshParts(this);
+        }
+    };
+
+    class $modify(LayoutCircleWave, CCCircleWave) {
+        void draw() override {
+            if (pass::active() && settings::hideEffects()) {
+                ++debug::counters().effectsSkipped;
+                return;
+            }
+            CCCircleWave::draw();
         }
     };
 }

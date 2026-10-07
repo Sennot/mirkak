@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <array>
+#include <chrono>
 #include <utility>
 #include <vector>
 
@@ -15,7 +16,13 @@ using namespace geode::prelude;
 
 namespace layoutfeed::hidden {
     namespace {
+        using Clock = std::chrono::steady_clock;
+
         constexpr int kRevealZOrder = 1 << 29;
+        // The candidate list (gameplay objects in view) is rebuilt at most
+        // this often; whether each candidate is hidden, and where it is, is
+        // still evaluated every frame, so nothing lags behind the game.
+        constexpr auto kCandidateRefresh = std::chrono::microseconds(8333);
 
         // Visible-section traversal, the same walk the reference clean-feed
         // mod uses for hitboxes: every object in the sections on screen,
@@ -48,7 +55,8 @@ namespace layoutfeed::hidden {
         }
 
         // The window rectangle in object-layer space (all four corners, so
-        // rotated and zoomed cameras are covered), with a small margin.
+        // rotated and zoomed cameras are covered), with a margin that grows
+        // with the view so large objects never pop in at the edge.
         CCRect visibleArea(GJBaseGameLayer* layer) {
             auto const size = CCDirector::sharedDirector()->getWinSize();
             auto* objectLayer = layer->m_objectLayer;
@@ -65,58 +73,60 @@ namespace layoutfeed::hidden {
                 minY = std::min(minY, point.y);
                 maxY = std::max(maxY, point.y);
             }
-            // Large objects can reach into view from far outside it.
             auto const margin = 60.f + 0.25f * std::max(maxX - minX, maxY - minY);
             return {minX - margin, minY - margin, maxX - minX + margin * 2.f, maxY - minY + margin * 2.f};
         }
 
-        bool revealable(GameObject* object, CCRect const& area) {
-            if (!object || object->m_isTrigger || object->m_isStartPos || object->m_isUIObject ||
-                object->m_isGroupDisabled) {
-                // Toggled-off groups stay hidden, as in GDH's Layout Mode.
-                return false;
-            }
-
+        // Properties that never change while a level runs. Most objects in
+        // view are decoration or triggers; filtering them here keeps the
+        // per-frame work to gameplay objects only.
+        bool candidate(GameObject* object) {
+            if (!object || object->m_isTrigger || object->m_isStartPos || object->m_isUIObject) return false;
             auto const type = object->m_objectType;
             if (type == GameObjectType::Decoration || type == GameObjectType::CollisionObject ||
                 type == GameObjectType::EnterEffectObject) {
                 return false;
             }
-
-            // Objects that are drawn but partly transparent are revealed by
-            // the layout shader (forced opacity); geometry GD may not draw at
-            // all is rebuilt here.
-            auto const visible = object->isVisible();
-            auto const active = object->getParent() != nullptr;
-            // Opacity 0 counts only when GD also dropped the quad (cocos2d
-            // collapses it to a point); a quad that still exists is revealed
-            // by the layout shader in place, with the game's exact geometry.
-            auto const& quad = object->m_sQuad;
-            auto const collapsed = quad.bl.vertices.x == quad.tr.vertices.x &&
-                quad.bl.vertices.y == quad.tr.vertices.y;
-            auto const hidden = object->m_isHide || !visible || !active ||
-                (object->getOpacity() == 0 && collapsed);
-            if (!hidden) return false;
-
-            // GD keeps every object in view active. An inactive object is only
-            // revealed when it is really on screen; objects at the edge of the
-            // visible sections switch between active and inactive and were
-            // drawn twice or in old places, which flickered.
-            if (!active && !area.containsPoint({
-                static_cast<float>(object->m_positionX), static_cast<float>(object->m_positionY)
-            })) {
-                return false;
-            }
-
-            // Picked-up coins and broken blocks are hidden by gameplay, not by
-            // the level design; they must not come back.
-            if (!visible && !object->m_isHide &&
-                (type == GameObjectType::Collectible || type == GameObjectType::SecretCoin ||
-                 type == GameObjectType::UserCoin || type == GameObjectType::Breakable)) {
-                return false;
-            }
-
             return !roles::hiddenInLayout(object);
+        }
+
+        bool collapsed(CCSprite* sprite) {
+            auto const& quad = sprite->m_sQuad;
+            return quad.bl.vertices.x == quad.tr.vertices.x && quad.bl.vertices.y == quad.tr.vertices.y;
+        }
+
+        // Every node from the sprite up to (not including) the object layer
+        // must be visible for the game to draw it.
+        bool visibleChain(CCNode* node, CCNode* objectLayer) {
+            for (int depth = 0; node && node != objectLayer && depth < 6; ++depth) {
+                if (!node->isVisible()) return false;
+                node = node->getParent();
+            }
+            return true;
+        }
+
+        // Whether the game (with the layout shader forcing opacity) shows this
+        // part by itself. Checks the actual outcome rather than single flags:
+        // a visible sprite in a hidden parent, or a batched sprite whose quad
+        // GD collapsed, is not drawn either.
+        bool drawnByGame(CCSprite* sprite, CCNode* objectLayer) {
+            if (!sprite->getParent()) return false;
+            if (!visibleChain(sprite, objectLayer)) return false;
+            return !(sprite->m_pobBatchNode && collapsed(sprite));
+        }
+
+        // Composite objects (DontDraw frame, art in children) are judged by
+        // their first sprite child.
+        bool objectDrawnByGame(GameObject* object, CCNode* objectLayer) {
+            if (object->m_isHide) return false;
+            if (!object->getDontDraw()) return drawnByGame(object, objectLayer);
+            if (!object->getParent() || !visibleChain(object, objectLayer)) return false;
+            if (auto* children = object->getChildren()) {
+                for (auto* child : CCArrayExt<CCNode*>(children)) {
+                    if (auto* sprite = typeinfo_cast<CCSprite*>(child)) return drawnByGame(sprite, objectLayer);
+                }
+            }
+            return true;
         }
 
         class RevealNode final : public CCNode {
@@ -139,24 +149,88 @@ namespace layoutfeed::hidden {
             void draw() override {
                 for (auto& batch : m_batches) batch.second.clear();
 
-                std::uint32_t revealed = 0;
                 auto const area = visibleArea(m_layer);
-                forEachObjectOnScreen(m_layer, [&](GameObject* object) {
-                    if (!revealable(object, area)) return;
-                    ++revealed;
-                    appendObject(object);
-                });
+                auto const now = Clock::now();
+                if (now - m_lastRefresh >= kCandidateRefresh) {
+                    m_lastRefresh = now;
+                    m_candidates.clear();
+                    forEachObjectOnScreen(m_layer, [&](GameObject* object) {
+                        if (candidate(object)) m_candidates.push_back(object);
+                    });
+                }
+
+                auto* objectLayer = m_layer->m_objectLayer;
+                std::uint32_t revealed = 0;
+                for (auto* object : m_candidates) {
+                    if (reveal(object, objectLayer, area)) ++revealed;
+                }
 
                 for (auto& [texture, vertices] : m_batches) {
-                    renderer::drawRevealed(texture, vertices);
+                    if (!vertices.empty()) renderer::drawRevealed(texture, vertices);
                 }
-                debug::counters().objectsRevealed += revealed;
+                auto& counters = debug::counters();
+                counters.objectsRevealed += revealed;
+                counters.revealCandidates += static_cast<std::uint32_t>(m_candidates.size());
             }
 
-            void forget() { m_layer = nullptr; }
+            void forget() {
+                m_layer = nullptr;
+                m_candidates.clear();
+            }
 
         private:
             explicit RevealNode(GJBaseGameLayer* layer) : m_layer(layer) {}
+
+            bool reveal(GameObject* object, CCNode* objectLayer, CCRect const& area) {
+                // Toggled-off groups stay hidden, as in GDH's Layout Mode.
+                if (object->m_isGroupDisabled) return false;
+
+                auto const active = object->getParent() != nullptr;
+                // GD keeps every object in view active; inactive objects are
+                // only revealed when they are really on screen.
+                if (!active && !area.containsPoint({
+                    static_cast<float>(object->m_positionX), static_cast<float>(object->m_positionY)
+                })) {
+                    return false;
+                }
+
+                auto const mainHidden = !objectDrawnByGame(object, objectLayer);
+                auto* detail = object->m_colorSprite;
+                auto const separateDetail = detail && detail->getParent() != object;
+                auto const detailHidden = separateDetail && !detail->getDontDraw() &&
+                    !drawnByGame(detail, objectLayer);
+                if (!mainHidden && !detailHidden) return false;
+
+                // Picked-up coins and broken blocks are hidden by gameplay, not
+                // by the level design; they must not come back.
+                if (mainHidden && !object->isVisible() && !object->m_isHide) {
+                    auto const type = object->m_objectType;
+                    if (type == GameObjectType::Collectible || type == GameObjectType::SecretCoin ||
+                        type == GameObjectType::UserCoin || type == GameObjectType::Breakable) {
+                        return false;
+                    }
+                }
+
+                // GD does not keep the node position of objects it is not
+                // drawing in sync while move triggers change their real
+                // position, so revealed parts go where the game has them.
+                auto const position = object->getPosition();
+                auto const base = CCAffineTransformMake(
+                    1.f, 0.f, 0.f, 1.f,
+                    static_cast<float>(object->m_positionX) - position.x,
+                    static_cast<float>(object->m_positionY) - position.y
+                );
+                if (mainHidden) {
+                    appendSprite(object, base, roles::revealColor(object, false));
+                    appendChildren(object, object, CCAffineTransformConcat(object->nodeToParentTransform(), base), 0);
+                }
+                // A detail sprite added beside the object in its batch follows
+                // the object but is not its child.
+                if (detailHidden || (mainHidden && separateDetail)) {
+                    appendSprite(detail, base, roles::revealColor(object, true));
+                }
+                return true;
+            }
 
             std::vector<ccV3F_C4B_T2F>& verticesFor(CCTexture2D* texture) {
                 for (auto& batch : m_batches) {
@@ -171,8 +245,7 @@ namespace layoutfeed::hidden {
             void appendSprite(CCSprite* sprite, CCAffineTransform const& parent, ccColor3B const& color) {
                 // DontDraw (a RobTop addition to CCSprite) marks sprites the
                 // game never shows, such as the frame of composite objects
-                // like spike slopes whose art is in their children. Drawing it
-                // put a rotated placeholder over the real object.
+                // like spike slopes whose art is in their children.
                 if (sprite->getDontDraw()) return;
                 auto* texture = sprite->getTexture();
                 if (!texture) return;
@@ -184,6 +257,7 @@ namespace layoutfeed::hidden {
                 auto const y1 = offset.y;
                 auto const x2 = x1 + rect.size.width;
                 auto const y2 = y1 + rect.size.height;
+                if (x1 == x2 || y1 == y2) return;
 
                 auto const corner = [&](float x, float y, ccTex2F const& uv) {
                     auto const point = CCPointApplyAffineTransform(CCPoint{x, y}, transform);
@@ -208,10 +282,22 @@ namespace layoutfeed::hidden {
                 if (depth > 3) return;
                 auto* children = node->getChildren();
                 if (!children) return;
+
+                // GD may hide every child of a hidden object individually;
+                // then all of them are revealed. When some are visible, the
+                // invisible ones are hidden on purpose (animation frames).
+                auto anyVisible = false;
+                for (auto* child : CCArrayExt<CCNode*>(children)) {
+                    if (child && child->isVisible()) {
+                        anyVisible = true;
+                        break;
+                    }
+                }
+
                 for (auto* child : CCArrayExt<CCNode*>(children)) {
                     if (!child) continue;
                     auto const detail = child == owner->m_colorSprite;
-                    if (!detail && !child->isVisible()) continue;
+                    if (anyVisible && !detail && !child->isVisible()) continue;
                     // Non-sprite children are walked through as well: text
                     // objects keep their letters in a label batch node.
                     if (auto* sprite = typeinfo_cast<CCSprite*>(child)) {
@@ -222,30 +308,9 @@ namespace layoutfeed::hidden {
                 }
             }
 
-            void appendObject(GameObject* object) {
-                // Object batches sit at the origin of the object layer, so the
-                // object's own transform is its object-layer transform. GD
-                // does not keep the node position of objects it is not
-                // drawing in sync while move triggers change their real
-                // position, so revealed objects are shifted to where the game
-                // currently has them.
-                auto const position = object->getPosition();
-                auto const base = CCAffineTransformMake(
-                    1.f, 0.f, 0.f, 1.f,
-                    static_cast<float>(object->m_positionX) - position.x,
-                    static_cast<float>(object->m_positionY) - position.y
-                );
-                appendSprite(object, base, roles::revealColor(object, false));
-                appendChildren(object, object, CCAffineTransformConcat(object->nodeToParentTransform(), base), 0);
-
-                // A detail sprite added beside the object in its batch follows
-                // the object but is not its child.
-                if (auto* detail = object->m_colorSprite; detail && detail->getParent() != object) {
-                    appendSprite(detail, base, roles::revealColor(object, true));
-                }
-            }
-
             GJBaseGameLayer* m_layer;
+            std::vector<GameObject*> m_candidates;
+            Clock::time_point m_lastRefresh{};
             std::vector<std::pair<CCTexture2D*, std::vector<ccV3F_C4B_T2F>>> m_batches;
         };
 

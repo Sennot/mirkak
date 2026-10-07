@@ -105,8 +105,24 @@ void main() {
             std::uint32_t hidden = 0;
             std::vector<CCObject*> sprites;
             std::vector<unsigned int> indices;
-            std::vector<std::uint8_t> flags;
+            std::vector<std::uint8_t> roles;    // per sprite, parallel to sprites
+            std::vector<CCNode*> parents;       // per sprite, for reuse checks
+            std::vector<std::uint8_t> flags;    // per quad, uploaded
+            std::uint32_t partialRebuilds = 0;
         };
+
+        // A rebuild reuses the role of every sprite that is still in the batch
+        // (same pointer, same parent) and only resolves new ones. GD inserts
+        // and removes a few sprites per activation, so a short lookahead keeps
+        // the old and new lists aligned.
+        constexpr std::size_t kReuseLookahead = 16;
+        // A periodic full resolve repairs any reused role whose sprite was
+        // freed and re-created at the same address in the same batch.
+        constexpr std::uint32_t kFullResolveEvery = 240;
+
+        std::vector<CCObject*> s_previousSprites;
+        std::vector<std::uint8_t> s_previousRoles;
+        std::vector<CCNode*> s_previousParents;
 
         State s_state = State::Untried;
         GLuint s_program = 0;
@@ -284,32 +300,65 @@ void main() {
                 return true;
             }
 
-            if (cache.atlas != atlas) {
-                cache.atlas = atlas;
-                cache.sprites.clear();
-            }
+            auto fullResolve = cache.atlas != atlas || cache.rolesGeneration != rolesGeneration ||
+                cache.settingsGeneration != settingsGeneration || ++cache.partialRebuilds >= kFullResolveEvery;
+            if (fullResolve) cache.partialRebuilds = 0;
+            cache.atlas = atlas;
             cache.quads = quads;
 
             auto const rows = static_cast<GLsizei>((quads + kFlagsWidth - 1) / kFlagsWidth);
             if ((!cache.texture || rows > cache.rows) && !allocate(cache, rows)) return false;
 
-            cache.flags.assign(static_cast<std::size_t>(rows) * kFlagsWidth, 0);
+            s_previousSprites.swap(cache.sprites);
+            s_previousRoles.swap(cache.roles);
+            s_previousParents.swap(cache.parents);
+            auto const previousCount = fullResolve ? std::size_t{0} : s_previousSprites.size();
+
+            cache.sprites.assign(items, items + count);
+            cache.roles.assign(count, 0);
+            cache.parents.assign(count, nullptr);
             cache.indices.resize(count);
+            cache.flags.assign(static_cast<std::size_t>(rows) * kFlagsWidth, 0);
             cache.hidden = 0;
+
+            std::uint32_t resolved = 0;
+            std::size_t cursor = 0;
             for (unsigned int i = 0; i < count; ++i) {
                 auto* sprite = static_cast<CCSprite*>(items[i]);
                 cache.indices[i] = sprite ? sprite->m_uAtlasIndex : 0u;
                 if (!sprite) continue;
+                auto* parent = sprite->getParent();
+                cache.parents[i] = parent;
+
+                auto role = roles::Role::Keep;
+                auto reused = false;
+                auto const end = std::min(previousCount, cursor + kReuseLookahead);
+                for (auto k = cursor; k < end; ++k) {
+                    if (s_previousSprites[k] != sprite) continue;
+                    if (s_previousParents[k] == parent) {
+                        role = static_cast<roles::Role>(s_previousRoles[k]);
+                        reused = true;
+                    }
+                    cursor = k + 1;
+                    break;
+                }
+                if (!reused) {
+                    role = roles::resolve(sprite);
+                    ++resolved;
+                }
+                cache.roles[i] = static_cast<std::uint8_t>(role);
+
                 // Sprites without a valid quad are not drawn by this atlas.
                 auto const index = sprite->m_uAtlasIndex;
                 if (index >= quads) continue;
-                auto const role = roles::resolve(sprite);
                 cache.flags[index] = static_cast<std::uint8_t>(role);
                 if (role == roles::Role::Hide) ++cache.hidden;
             }
-            cache.sprites.assign(items, items + count);
             cache.rolesGeneration = rolesGeneration;
             cache.settingsGeneration = settingsGeneration;
+            auto& counters = debug::counters();
+            counters.spritesResolved += resolved;
+            counters.spritesReused += count - resolved;
 
             // Client-memory upload: no pixel unpack buffer, tight rows.
             GLint alignment = 4;

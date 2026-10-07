@@ -1,10 +1,10 @@
 #include "object_roles.hpp"
 
+#include "pointer_map.hpp"
 #include "../debug.hpp"
 #include "../settings.hpp"
 
 #include <bitset>
-#include <unordered_map>
 #include <utility>
 
 using namespace geode::prelude;
@@ -83,7 +83,11 @@ namespace layoutfeed::roles {
             CCNode const* ref = nullptr;
         };
 
-        std::unordered_map<CCNode const*, Entry> s_entries;
+        bool sameEntry(Entry const& a, Entry const& b) {
+            return a.bits == b.bits && a.origin == b.origin && a.ref == b.ref;
+        }
+
+        PointerMap<Entry> s_entries;
         std::uint32_t s_generation = 1;
         bool s_collecting = false;
 
@@ -92,9 +96,11 @@ namespace layoutfeed::roles {
             std::uint32_t decoration = 0;
             std::uint32_t detailSprites = 0;
             std::uint32_t glowSprites = 0;
+            std::uint32_t activationParts = 0;
             std::uint32_t lazy = 0;
             std::uint32_t lazyKeep = 0;
             std::uint32_t stale = 0;
+            std::uint32_t changed = 0;
         } s_totals;
 
         bool isDecoration(GameObject* object) {
@@ -115,18 +121,26 @@ namespace layoutfeed::roles {
             return entry;
         }
 
-        void store(CCNode const* node, Entry entry) {
-            if (node) s_entries.insert_or_assign(node, entry);
+        // Role masks only have to be rebuilt when a sprite that may already
+        // be in one changes its role; brand new entries cannot be in a mask.
+        bool store(CCNode const* node, Entry entry) {
+            if (!node) return false;
+            auto const result = s_entries.assign(node, entry, sameEntry);
+            if (result != PointerMap<Entry>::Assigned::Changed) return result == PointerMap<Entry>::Assigned::Inserted;
+            ++s_totals.changed;
+            ++s_generation;
+            return true;
         }
 
-        void storeParts(GameObject* object) {
-            store(object, {entryFor(object, PartMain), Origin::Object, nullptr});
-            if (object->m_colorSprite) {
-                store(object->m_colorSprite, {entryFor(object, PartDetail), Origin::Detail, object});
+        // Detail and glow sprites are often created or re-created when GD
+        // activates an object, after PlayLayer::addObject has run.
+        void storeSubParts(GameObject* object) {
+            if (object->m_colorSprite &&
+                store(object->m_colorSprite, {entryFor(object, PartDetail), Origin::Detail, object})) {
                 ++s_totals.detailSprites;
             }
-            if (object->m_glowSprite) {
-                store(object->m_glowSprite, {entryFor(object, PartGlow), Origin::Glow, object});
+            if (object->m_glowSprite &&
+                store(object->m_glowSprite, {entryFor(object, PartGlow), Origin::Glow, object})) {
                 ++s_totals.glowSprites;
             }
         }
@@ -148,10 +162,10 @@ namespace layoutfeed::roles {
 
         // Finds a still valid entry; stale ones are dropped.
         Entry const* lookup(CCNode const* node) {
-            auto found = s_entries.find(node);
-            if (found == s_entries.end()) return nullptr;
-            if (valid(node, found->second)) return &found->second;
-            s_entries.erase(found);
+            auto* entry = s_entries.find(node);
+            if (!entry) return nullptr;
+            if (valid(node, *entry)) return entry;
+            s_entries.erase(node);
             ++s_totals.stale;
             return nullptr;
         }
@@ -214,16 +228,28 @@ namespace layoutfeed::roles {
 
     void registerObject(GameObject* object) {
         if (!s_collecting || !object) return;
-        storeParts(object);
+        store(object, {entryFor(object, PartMain), Origin::Object, nullptr});
+        storeSubParts(object);
         ++s_totals.objects;
         if (isDecoration(object)) ++s_totals.decoration;
-        ++s_generation;
     }
 
     void registerGlow(GameObject* object) {
         if (!s_collecting || !object || !object->m_glowSprite) return;
-        store(object->m_glowSprite, {entryFor(object, PartGlow), Origin::Glow, object});
-        ++s_generation;
+        if (store(object->m_glowSprite, {entryFor(object, PartGlow), Origin::Glow, object})) {
+            ++s_totals.glowSprites;
+        }
+    }
+
+    void refreshParts(GameObject* object) {
+        if (!s_collecting || !object) return;
+        // Only level objects: the player and editor objects are never
+        // registered and must keep their own colors.
+        auto const* entry = s_entries.find(object);
+        if (!entry || entry->origin != Origin::Object) return;
+        auto const before = s_totals.detailSprites + s_totals.glowSprites;
+        storeSubParts(object);
+        s_totals.activationParts += s_totals.detailSprites + s_totals.glowSprites - before;
     }
 
     Role resolve(CCNode* sprite) {
@@ -233,13 +259,7 @@ namespace layoutfeed::roles {
         auto const bits = classify(sprite);
         store(sprite, {bits, Origin::Lazy, sprite->getParent()});
         ++s_totals.lazy;
-        if ((bits & kPartMask) == PartKeep) {
-            ++s_totals.lazyKeep;
-        } else {
-            // A newly known object part: caches built this frame may hold the
-            // previous Keep value for sprites classified together with it.
-            ++s_generation;
-        }
+        if ((bits & kPartMask) == PartKeep) ++s_totals.lazyKeep;
         return toRole(bits);
     }
 
@@ -264,10 +284,12 @@ namespace layoutfeed::roles {
 
     void logSummary() {
         log::info(
-            "roles: {} objects registered ({} decoration), {} detail sprites, {} glow sprites, "
-            "{} lazily classified ({} unrelated to objects), {} stale entries replaced, {} cache entries",
+            "roles: {} objects registered ({} decoration), {} detail sprites, {} glow sprites "
+            "({} found at activation), {} lazily classified ({} unrelated to objects), "
+            "{} stale entries replaced, {} roles changed, {} cache entries",
             s_totals.objects, s_totals.decoration, s_totals.detailSprites, s_totals.glowSprites,
-            s_totals.lazy, s_totals.lazyKeep, s_totals.stale, s_entries.size()
+            s_totals.activationParts, s_totals.lazy, s_totals.lazyKeep, s_totals.stale,
+            s_totals.changed, s_entries.size()
         );
     }
 }

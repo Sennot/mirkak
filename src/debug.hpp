@@ -29,12 +29,16 @@ namespace layoutfeed::debug {
         std::uint32_t glowBatches = 0;
         std::uint32_t flagRebuilds = 0;
         std::uint32_t flagReuses = 0;
+        std::uint64_t spritesResolved = 0;
+        std::uint64_t spritesReused = 0;
         std::uint64_t quadsDrawn = 0;
         std::uint64_t quadsHidden = 0;
         std::uint32_t spritesTinted = 0;
         std::uint32_t spritesHidden = 0;
         std::uint32_t particlesSkipped = 0;
         std::uint32_t objectsRevealed = 0;
+        std::uint32_t revealCandidates = 0;
+        std::uint32_t effectsSkipped = 0;
         std::uint32_t fallbackDraws = 0;
     };
 
