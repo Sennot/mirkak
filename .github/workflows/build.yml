@@ -23,12 +23,11 @@ jobs:
         with:
           # Keep CI aligned with mod.json and the loader version this mod targets.
           sdk: 5.8.2
-          # Pinned: since geode-sdk/bindings#1347 (2026-10-06) renamed fields of
-          # GJGameState with [[renamed_from]], the generated class has an
-          # anonymous union of CCPoints and is no longer copyable. Trajectory
-          # prediction snapshots and restores the whole game state, so the
-          # last bindings commit before that change is used.
-          bindings-ref: f050fd74ad531b0827377c97510cb807903ff1b3
+          # Pinned bindings: trajectory prediction copies GJGameState member by
+          # member (src/trajectory/game_state_copy.hpp lists its containers),
+          # so the layout must not change unnoticed. Update deliberately and
+          # re-check that list.
+          bindings-ref: a000cafb6bec509a258334faa6b2d4e23160a0f6
           target: Win64
           build-config: RelWithDebInfo
           export-pdb: true

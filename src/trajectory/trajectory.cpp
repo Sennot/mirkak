@@ -2,6 +2,7 @@
 // (GPL-3.0). Bot, replay, renderer and UI coupling were removed. Drawing goes
 // through the GPU shape batch of Spout2 Layout Feed instead of CCDrawNode.
 #include "trajectory.hpp"
+#include "game_state_copy.hpp"
 #include "visibility.hpp"
 
 #include "overlay/player_overlay.hpp"
@@ -475,7 +476,7 @@ namespace layoutfeed {
         other->setVisible(false);
 
         clearActivatedObjects();
-        layer->m_gameState = frameGameState;
+        game_state::assign(layer->m_gameState, frameGameState);
         layer->m_effectManager->loadFromState(frameEffectState);
     }
 
@@ -543,7 +544,8 @@ namespace layoutfeed {
         // Every hold/release branch starts from the same real frame. Capturing
         // these large states once avoids repeating container allocations and
         // hundreds of player-field copies without changing any simulated step.
-        GJGameState const frameGameState = layer->m_gameState;
+        game_state::Snapshot const frameSnapshot(layer->m_gameState);
+        auto const& frameGameState = frameSnapshot.get();
         EffectManagerState localEffectState;
         auto& frameEffectState = m_predictionSettings.highPerformance
             ? m_reusableEffectState
