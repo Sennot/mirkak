@@ -6,6 +6,7 @@
 #include "debug.hpp"
 #include "layout/hidden_objects.hpp"
 #include "layout/layout_pass.hpp"
+#include "overlay/player_overlay.hpp"
 #include "overlay_capture.hpp"
 #include "present_hook.hpp"
 #include "settings.hpp"
@@ -67,6 +68,10 @@ namespace layoutfeed {
                 case FrameMode::Plain:
                     captureSpout();
                     debug::checkGL("spout::capture");
+                    // No layout pass this frame (Layout Mode off, editor):
+                    // hitboxes and trajectory go on top of the captured frame,
+                    // so only the monitor shows them.
+                    player_overlay::drawForPlayer();
                     break;
                 case FrameMode::Early:
                     break;

@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.1.0
+- Hitboxes and trajectory prediction from Spout2 Clean Feed (v1.7.0), on your screen only. OBS still
+  receives the clean level. Works with Layout Mode on (drawn inside the layout pass, following the
+  camera) and off, in levels and in the editor.
+- New GPU shape shader for both: per shape the CPU writes only its description, fill, border and
+  antialiasing are computed per pixel; no CCDrawNode outline tessellation. Object hitboxes now follow
+  the view up to 240 times per second (the clean-feed mod capped them at 60), with the same adaptive
+  back-off on dense sections. Circles are exact instead of 12-sided polygons.
+- Trajectory physics, checkpoints, track merging and the prediction cache are unchanged.
+- All clean-feed overlay settings: toggles and keybinds (F3 hitboxes, F4 trajectory), trajectory
+  length, TPS, width, high-performance mode and colors, hitbox width, fill opacity and colors, and
+  Smart Contrast.
+- The mod is now GPL-3.0 because it contains the Silicate-derived prediction code.
+
 ## v2.0.5
 - Saws and slopes with hitboxes hidden by alpha: their DontDraw sprites are not in the batch atlas
   (GD draws them itself), so the layout shader could not make them opaque. They now count as

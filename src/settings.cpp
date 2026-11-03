@@ -3,11 +3,19 @@
 #include <Geode/loader/SettingV3.hpp>
 
 #include <algorithm>
+#include <array>
+#include <string_view>
 
 using namespace geode::prelude;
 
 namespace layoutfeed::settings {
     namespace {
+        constexpr std::array<std::string_view, static_cast<std::size_t>(Color::Count)> kColorKeys{
+            "solid-color", "hazard-color", "interactable-color",
+            "player-color", "player-inner-color", "player-rotated-color",
+            "trajectory-hold-color", "trajectory-release-color",
+        };
+
         struct Cache {
             bool enabled = true;
             std::string senderName;
@@ -32,6 +40,16 @@ namespace layoutfeed::settings {
             ccColor3B backgroundColor{40, 125, 255};
             ccColor3B groundColor{0, 102, 255};
             ccColor3B lineColor{255, 255, 255};
+
+            bool showHitboxes = true;
+            bool showTrajectory = true;
+            bool highPerformanceTrajectory = true;
+            int trajectoryTps = 240;
+            float trajectoryLength = 2.f;
+            float trajectoryWidth = 0.65f;
+            float hitboxWidth = 0.3f;
+            float hitboxFillOpacity = 0.08f;
+            std::array<ccColor4F, kColorKeys.size()> colors{};
 
             bool debugLogging = false;
             int statsInterval = 5;
@@ -67,6 +85,22 @@ namespace layoutfeed::settings {
             value.backgroundColor = mod->getSettingValue<ccColor3B>("layout-background-color");
             value.groundColor = mod->getSettingValue<ccColor3B>("layout-ground-color");
             value.lineColor = mod->getSettingValue<ccColor3B>("layout-line-color");
+
+            value.showHitboxes = mod->getSettingValue<bool>("show-hitboxes");
+            value.showTrajectory = mod->getSettingValue<bool>("show-trajectory");
+            value.highPerformanceTrajectory = mod->getSettingValue<bool>("high-performance-trajectory");
+            value.trajectoryTps = static_cast<int>(std::clamp(
+                mod->getSettingValue<int64_t>("trajectory-tps"), int64_t{60}, int64_t{1000}
+            ));
+            value.trajectoryLength = std::clamp(static_cast<float>(mod->getSettingValue<double>("trajectory-length")), 0.1f, 5.f);
+            value.trajectoryWidth = std::clamp(static_cast<float>(mod->getSettingValue<double>("trajectory-width")), 0.1f, 5.f);
+            value.hitboxWidth = std::clamp(static_cast<float>(mod->getSettingValue<double>("hitbox-width")), 0.05f, 5.f);
+            value.hitboxFillOpacity = std::clamp(static_cast<float>(mod->getSettingValue<double>("hitbox-fill-opacity")), 0.f, 1.f);
+            constexpr float scale = 1.f / 255.f;
+            for (std::size_t index = 0; index < kColorKeys.size(); ++index) {
+                auto const color = mod->getSettingValue<ccColor4B>(std::string(kColorKeys[index]));
+                value.colors[index] = {color.r * scale, color.g * scale, color.b * scale, color.a * scale};
+            }
 
             value.debugLogging = mod->getSettingValue<bool>("debug-logging");
             value.statsInterval = static_cast<int>(std::clamp(
@@ -118,6 +152,16 @@ namespace layoutfeed::settings {
     ccColor3B groundColor() { return cache().groundColor; }
     ccColor3B lineColor() { return cache().lineColor; }
 
+    bool showHitboxes() { return cache().showHitboxes; }
+    bool showTrajectory() { return cache().showTrajectory; }
+    bool highPerformanceTrajectory() { return cache().highPerformanceTrajectory; }
+    int trajectoryTps() { return cache().trajectoryTps; }
+    float trajectoryLength() { return cache().trajectoryLength; }
+    float trajectoryWidth() { return cache().trajectoryWidth; }
+    float hitboxWidth() { return cache().hitboxWidth; }
+    float hitboxFillOpacity() { return cache().hitboxFillOpacity; }
+    ccColor4F color(Color key) { return cache().colors[static_cast<std::size_t>(key)]; }
+
     bool debugLogging() { return cache().debugLogging; }
     int statsInterval() { return cache().statsInterval; }
     bool gpuTimers() { return cache().gpuTimers; }
@@ -131,12 +175,13 @@ namespace layoutfeed::settings {
         auto const& value = cache();
         log::info(
             "Settings: spout={} sender='{}' cursor={} menus={} steam={} | layout={} deco={} animDeco={} recolor={} opacity={} "
-            "blending={} glow={} particles={} effects={} mg={} shaders={} player={} | debug={} interval={}s gpuTimers={}",
+            "blending={} glow={} particles={} effects={} mg={} shaders={} player={} | hitboxes={} trajectory={} tps={} length={} | debug={} interval={}s gpuTimers={}",
             value.enabled, value.senderName, value.captureCursor, value.captureMenus,
             value.captureSystemOverlays,
             value.layoutEnabled, value.hideDecoration, value.showAnimatedDecoration, value.recolorObjects, value.forceOpacity,
             value.normalBlending, value.hideGlow, value.hideParticles, value.hideEffects, value.hideMiddleground,
-            value.disableShaders, value.alwaysShowPlayer, value.debugLogging, value.statsInterval, value.gpuTimers
+            value.disableShaders, value.alwaysShowPlayer, value.showHitboxes, value.showTrajectory,
+            value.trajectoryTps, value.trajectoryLength, value.debugLogging, value.statsInterval, value.gpuTimers
         );
     }
 }

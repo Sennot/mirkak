@@ -6,6 +6,19 @@
 #include <string>
 
 namespace layoutfeed::settings {
+    // Overlay colors, same keys and order as the clean-feed mod.
+    enum class Color {
+        Solid,
+        Hazard,
+        Interactable,
+        Player,
+        PlayerInner,
+        PlayerRotated,
+        TrajectoryHold,
+        TrajectoryRelease,
+        Count,
+    };
+
     // Spout2
     bool enabled();
     std::string const& senderName();
@@ -31,6 +44,17 @@ namespace layoutfeed::settings {
     cocos2d::ccColor3B backgroundColor();
     cocos2d::ccColor3B groundColor();
     cocos2d::ccColor3B lineColor();
+
+    // Screen-only overlays (hitboxes, trajectory)
+    bool showHitboxes();
+    bool showTrajectory();
+    bool highPerformanceTrajectory();
+    int trajectoryTps();
+    float trajectoryLength();
+    float trajectoryWidth();
+    float hitboxWidth();
+    float hitboxFillOpacity();
+    cocos2d::ccColor4F color(Color key);
 
     // Debug
     bool debugLogging();

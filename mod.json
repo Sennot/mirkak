@@ -5,10 +5,13 @@
   },
   "id": "halil.spout2-layout-feed",
   "name": "Spout2 Layout Feed",
-  "version": "v2.0.5",
+  "version": "v2.1.0",
   "developer": "halil",
-  "description": "Plays levels in Layout Mode on your screen while OBS receives the normal, fully decorated level through Spout2.",
-  "tags": ["gameplay", "utility"],
+  "description": "Plays levels in Layout Mode with hitboxes and trajectory on your screen while OBS receives the normal, fully decorated level through Spout2.",
+  "tags": [
+    "gameplay",
+    "utility"
+  ],
   "settings": {
     "spout-title": {
       "type": "title",
@@ -140,32 +143,259 @@
     "layout-object-color": {
       "type": "rgb",
       "name": "Object color",
-      "default": [255, 255, 255],
+      "default": [
+        255,
+        255,
+        255
+      ],
       "enable-if": "layout-enabled"
     },
     "layout-detail-color": {
       "type": "rgb",
       "name": "Object detail color",
-      "default": [0, 0, 0],
+      "default": [
+        0,
+        0,
+        0
+      ],
       "enable-if": "layout-enabled"
     },
     "layout-background-color": {
       "type": "rgb",
       "name": "Background color",
-      "default": [40, 125, 255],
+      "default": [
+        40,
+        125,
+        255
+      ],
       "enable-if": "layout-enabled"
     },
     "layout-ground-color": {
       "type": "rgb",
       "name": "Ground color",
-      "default": [0, 102, 255],
+      "default": [
+        0,
+        102,
+        255
+      ],
       "enable-if": "layout-enabled"
     },
     "layout-line-color": {
       "type": "rgb",
       "name": "Ground line color",
-      "default": [255, 255, 255],
+      "default": [
+        255,
+        255,
+        255
+      ],
       "enable-if": "layout-enabled"
+    },
+    "overlay-title": {
+      "type": "title",
+      "name": "Hitboxes & trajectory (your screen only)"
+    },
+    "smart-contrast": {
+      "type": "button",
+      "name": "Smart Contrast",
+      "description": "Analyzes a locally saved level once and generates three high-visibility color palettes. The analyzer uses no CPU after it finishes.",
+      "buttons": {
+        "analyze": "Analyze"
+      }
+    },
+    "show-hitboxes": {
+      "type": "bool",
+      "name": "Show hitboxes",
+      "default": true,
+      "description": "Draws object and player hitboxes on your screen. OBS never shows them."
+    },
+    "show-trajectory": {
+      "type": "bool",
+      "name": "Show trajectory",
+      "default": true,
+      "description": "Predicts where you go when holding and releasing and draws both paths on your screen only."
+    },
+    "keybind-title": {
+      "type": "title",
+      "name": "Keybinds"
+    },
+    "toggle-hitboxes-keybind": {
+      "type": "keybind",
+      "name": "Toggle hitboxes",
+      "description": "Toggles the hitbox overlay in a level or editor, including during the death delay and pause.",
+      "default": "F3",
+      "category": "universal"
+    },
+    "toggle-trajectory-keybind": {
+      "type": "keybind",
+      "name": "Toggle trajectory",
+      "description": "Toggles the trajectory overlay in a level or editor, including during the death delay and pause.",
+      "default": "F4",
+      "category": "universal"
+    },
+    "trajectory-length": {
+      "type": "float",
+      "name": "Trajectory length (seconds)",
+      "default": 2.0,
+      "min": 0.1,
+      "max": 5.0,
+      "control": {
+        "slider": true,
+        "slider-step": 0.1,
+        "input": true
+      },
+      "enable-if": "show-trajectory"
+    },
+    "high-performance-trajectory": {
+      "type": "bool",
+      "name": "High-performance trajectory",
+      "description": "Reuses prediction snapshots and their container memory between frames. Disable this to use the v1.4.2 allocation path for troubleshooting.",
+      "default": true,
+      "enable-if": "show-trajectory"
+    },
+    "trajectory-tps": {
+      "type": "int",
+      "name": "Trajectory simulation TPS",
+      "description": "240 is accurate and usually fast enough. Higher values cost more CPU.",
+      "default": 240,
+      "min": 60,
+      "max": 1000,
+      "control": {
+        "slider": true,
+        "slider-step": 60,
+        "input": true
+      },
+      "enable-if": "show-trajectory"
+    },
+    "trajectory-width": {
+      "type": "float",
+      "name": "Trajectory line width",
+      "default": 0.65,
+      "min": 0.1,
+      "max": 5.0,
+      "control": {
+        "slider": true,
+        "slider-step": 0.05,
+        "input": true
+      },
+      "enable-if": "show-trajectory"
+    },
+    "trajectory-hold-color": {
+      "type": "rgba",
+      "name": "Hold trajectory color",
+      "default": [
+        0,
+        255,
+        26,
+        255
+      ],
+      "enable-if": "show-trajectory"
+    },
+    "trajectory-release-color": {
+      "type": "rgba",
+      "name": "Release trajectory color",
+      "default": [
+        255,
+        0,
+        26,
+        255
+      ],
+      "enable-if": "show-trajectory"
+    },
+    "hitbox-title": {
+      "type": "title",
+      "name": "Hitbox style"
+    },
+    "hitbox-width": {
+      "type": "float",
+      "name": "Hitbox line width",
+      "default": 0.3,
+      "min": 0.05,
+      "max": 5.0,
+      "control": {
+        "slider": true,
+        "slider-step": 0.05,
+        "input": true
+      },
+      "enable-if": "show-hitboxes"
+    },
+    "hitbox-fill-opacity": {
+      "type": "float",
+      "name": "Hitbox fill opacity",
+      "default": 0.08,
+      "min": 0.0,
+      "max": 1.0,
+      "control": {
+        "slider": true,
+        "slider-step": 0.01,
+        "input": true
+      },
+      "enable-if": "show-hitboxes"
+    },
+    "solid-color": {
+      "type": "rgba",
+      "name": "Solid color",
+      "default": [
+        0,
+        63,
+        255,
+        255
+      ],
+      "enable-if": "show-hitboxes"
+    },
+    "hazard-color": {
+      "type": "rgba",
+      "name": "Hazard color",
+      "default": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "enable-if": "show-hitboxes"
+    },
+    "interactable-color": {
+      "type": "rgba",
+      "name": "Interactable color",
+      "default": [
+        0,
+        255,
+        64,
+        255
+      ],
+      "enable-if": "show-hitboxes"
+    },
+    "player-color": {
+      "type": "rgba",
+      "name": "Player color",
+      "default": [
+        255,
+        0,
+        0,
+        255
+      ],
+      "enable-if": "show-hitboxes"
+    },
+    "player-inner-color": {
+      "type": "rgba",
+      "name": "Player inner color",
+      "default": [
+        0,
+        255,
+        51,
+        255
+      ],
+      "enable-if": "show-hitboxes"
+    },
+    "player-rotated-color": {
+      "type": "rgba",
+      "name": "Player rotated color",
+      "default": [
+        255,
+        255,
+        0,
+        255
+      ],
+      "enable-if": "show-hitboxes"
     },
     "debug-title": {
       "type": "title",
