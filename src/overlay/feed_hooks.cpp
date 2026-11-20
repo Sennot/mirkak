@@ -11,6 +11,7 @@
 #include <Geode/modify/PlayerObject.hpp>
 
 #include "hitboxes.hpp"
+#include "level_overlay/level_overlay.hpp"
 #include "player_overlay.hpp"
 #include "physics/collisions.hpp"
 #include "physics/gjbasegamelayer.hpp"
@@ -68,16 +69,19 @@ namespace layoutfeed {
 
         bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
             if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
+            if (level_overlay::constructing()) return true;
             setupForLayer(this);
             return true;
         }
 
         void updateVisibility(float dt) override {
             PlayLayer::updateVisibility(dt);
-            updateOverlays(this);
+            if (!level_overlay::inLevelB()) updateOverlays(this);
         }
 
         void destroyPlayer(PlayerObject* player, GameObject* object) override {
+            // Level B of the Level Overlay follows the real player and never dies.
+            if (level_overlay::isLevelB(this)) return;
             if (Trajectory::get().hasDied(player)) return;
             PlayLayer::destroyPlayer(player, object);
         }
@@ -108,7 +112,7 @@ namespace layoutfeed {
 
     class $modify(FeedBaseGameLayer, GJBaseGameLayer) {
         void handleButton(bool down, int button, bool player1) {
-            if (button == static_cast<int>(PlayerButton::Jump)) {
+            if (button == static_cast<int>(PlayerButton::Jump) && !level_overlay::inLevelB()) {
                 Trajectory::get().handleButton(player1, down);
             }
             GJBaseGameLayer::handleButton(down, button, player1);
@@ -162,7 +166,7 @@ namespace layoutfeed {
         }
 
         void incrementJumps() {
-            if (!Trajectory::get().drawing()) PlayerObject::incrementJumps();
+            if (!Trajectory::get().drawing() && !level_overlay::inLevelB()) PlayerObject::incrementJumps();
         }
 
         void ringJump(RingObject* ring, bool unknown) {

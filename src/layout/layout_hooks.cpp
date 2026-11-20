@@ -3,6 +3,7 @@
 #include "layout_renderer.hpp"
 #include "object_roles.hpp"
 #include "../debug.hpp"
+#include "../level_overlay/level_overlay.hpp"
 #include "../settings.hpp"
 
 #include <Geode/Geode.hpp>
@@ -188,6 +189,8 @@ namespace layoutfeed {
 
     class $modify(LayoutPlayLayer, PlayLayer) {
         bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
+            // Level B of the Level Overlay is drawn as it is, not in Layout Mode.
+            if (level_overlay::constructing()) return PlayLayer::init(level, useReplay, dontCreateObjects);
             // Objects are created inside init, so start collecting first.
             pass::onLevelEnter(this);
             if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
@@ -198,7 +201,7 @@ namespace layoutfeed {
 
         void addObject(GameObject* object) {
             PlayLayer::addObject(object);
-            roles::registerObject(object);
+            if (!level_overlay::inLevelB()) roles::registerObject(object);
         }
 
         void onQuit() {
@@ -211,7 +214,7 @@ namespace layoutfeed {
     class $modify(LayoutGameObject, GameObject) {
         void addGlow(gd::string frame) {
             GameObject::addGlow(frame);
-            roles::registerGlow(this);
+            if (!level_overlay::inLevelB()) roles::registerGlow(this);
         }
 
         // GD creates or replaces detail and glow sprites when an object comes
@@ -220,7 +223,7 @@ namespace layoutfeed {
         // invisible levels).
         void activateObject() override {
             GameObject::activateObject();
-            roles::refreshParts(this);
+            if (!level_overlay::inLevelB()) roles::refreshParts(this);
         }
     };
 

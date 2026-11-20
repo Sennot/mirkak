@@ -1,5 +1,21 @@
 # Changelog
 
+## v2.2.0
+- Level Overlay: you play level A (the level you open) while your screen shows level B in its place,
+  fully drawn with its objects, colors, background and shaders. OBS still receives level A.
+  Level B is picked by the ID of a downloaded online level or by the name of a created level.
+- Level B runs as a second, never-shown PlayLayer next to level A: every update its players take
+  level A's position, speed, game mode and held buttons, so its triggers, moving groups, colors and
+  camera play along. Resets, practice checkpoints and the practice toggle are mirrored.
+- Level B is silent and never dies or finishes; its attempts, jumps and statistics are not counted.
+- Your player, hitboxes, trajectory, progress bar, pause menu and popups of level A are drawn on top.
+- Toggle with F7. While hidden, level B keeps running so it is in sync when shown again.
+  Turning the feature off in a level stops the simulation at once.
+- "Static objects only" option: level B is not simulated, it takes level A's camera and only shows
+  its objects where they were placed. Much cheaper.
+- Performance: level B replaces the layout pass on the monitor (no third render); its simulation and
+  draw time appear in the debug statistics as level-b-sim and level-b.
+
 ## v2.1.0
 - Hitboxes and trajectory prediction from Spout2 Clean Feed (v1.7.0), on your screen only. OBS still
   receives the clean level. Works with Layout Mode on (drawn inside the layout pass, following the

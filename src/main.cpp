@@ -6,6 +6,7 @@
 #include "debug.hpp"
 #include "layout/hidden_objects.hpp"
 #include "layout/layout_pass.hpp"
+#include "level_overlay/level_overlay.hpp"
 #include "overlay/player_overlay.hpp"
 #include "overlay_capture.hpp"
 #include "present_hook.hpp"
@@ -41,9 +42,12 @@ namespace layoutfeed {
             if (overlay::redirecting()) overlay::abandon("swapBuffers");
 
             s_mode = FrameMode::Plain;
-            if (!pass::shouldRender()) return;
+            // Level Overlay replaces the layout pass: the monitor shows level B.
+            auto const levelB = level_overlay::shouldRender();
+            if (!levelB && !pass::shouldRender()) return;
+            auto const renderScreen = levelB ? &level_overlay::render : &pass::render;
 
-            if (settings::captureMenus() && overlay::begin(&pass::render)) {
+            if (settings::captureMenus() && overlay::begin(renderScreen)) {
                 s_mode = FrameMode::Redirected;
                 // Menus drawing next must not see an error from this mod.
                 debug::drainGL("layout pass");
@@ -54,7 +58,7 @@ namespace layoutfeed {
             s_mode = FrameMode::Early;
             captureSpout();
             debug::checkGL("spout::capture");
-            pass::render();
+            renderScreen();
             debug::drainGL("layout pass");
         }
 
@@ -151,6 +155,18 @@ $on_game(Loaded) {
             auto const enabled = !mod->getSettingValue<bool>("layout-enabled");
             mod->setSettingValue<bool>("layout-enabled", enabled);
             log::info("Layout Mode {} by keybind", enabled ? "enabled" : "disabled");
+        }
+    );
+
+    listenForKeybindSettingPresses(
+        "level-overlay-keybind",
+        [](Keybind const&, bool down, bool repeat, double) {
+            if (!down || repeat) return;
+            auto* mod = Mod::get();
+            if (!mod->getSettingValue<bool>("level-overlay-enabled")) return;
+            auto const shown = !mod->getSettingValue<bool>("level-overlay-show");
+            mod->setSettingValue<bool>("level-overlay-show", shown);
+            log::info("Level Overlay {} by keybind", shown ? "shown" : "hidden");
         }
     );
 

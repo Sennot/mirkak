@@ -5,7 +5,7 @@
   },
   "id": "halil.spout2-layout-feed",
   "name": "Spout2 Layout Feed",
-  "version": "v2.1.0",
+  "version": "v2.2.0",
   "developer": "halil",
   "description": "Plays levels in Layout Mode with hitboxes and trajectory on your screen while OBS receives the normal, fully decorated level through Spout2.",
   "tags": [
@@ -189,6 +189,57 @@
         255
       ],
       "enable-if": "layout-enabled"
+    },
+    "level-overlay-title": {
+      "type": "title",
+      "name": "Level Overlay (your screen only)"
+    },
+    "level-overlay-enabled": {
+      "type": "bool",
+      "name": "Enable Level Overlay",
+      "description": "You play level A (the level you open) while your screen shows level B in its place, fully drawn: objects, colors, background, shaders. Level B runs alongside level A and follows your player. OBS still receives level A. Level B is loaded when you enter a level.",
+      "default": false
+    },
+    "level-overlay-keybind": {
+      "type": "keybind",
+      "name": "Toggle Level Overlay",
+      "description": "Shows or hides level B on your screen. Level B keeps running while hidden, so it is in sync when shown again.",
+      "default": "F7",
+      "category": "universal"
+    },
+    "level-overlay-show": {
+      "type": "bool",
+      "name": "Show level B",
+      "description": "Switched by the keybind.",
+      "default": true,
+      "enable-if": "level-overlay-enabled"
+    },
+    "level-overlay-level-id": {
+      "type": "int",
+      "name": "Level B ID",
+      "description": "ID of a downloaded online level (it must be in your saved levels). Used first when it is set.",
+      "default": 0,
+      "min": 0,
+      "max": 999999999,
+      "control": {
+        "arrows": false,
+        "slider": false
+      },
+      "enable-if": "level-overlay-enabled"
+    },
+    "level-overlay-level-name": {
+      "type": "string",
+      "name": "Level B name",
+      "description": "Name of one of your created levels. Used when the ID is 0 or that level is not downloaded.",
+      "default": "",
+      "enable-if": "level-overlay-enabled"
+    },
+    "level-overlay-static": {
+      "type": "bool",
+      "name": "Static objects only",
+      "description": "Level B is not simulated: its objects stay where they were placed and the camera of level A is used. Triggers of level B (move, color, alpha, camera) do nothing. Much cheaper than the full simulation.",
+      "default": false,
+      "enable-if": "level-overlay-enabled"
     },
     "overlay-title": {
       "type": "title",

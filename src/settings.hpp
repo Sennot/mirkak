@@ -45,6 +45,13 @@ namespace layoutfeed::settings {
     cocos2d::ccColor3B groundColor();
     cocos2d::ccColor3B lineColor();
 
+    // Level Overlay (level B on the screen)
+    bool levelOverlayEnabled();
+    bool levelOverlayShown();
+    int levelOverlayLevelId();
+    std::string const& levelOverlayLevelName();
+    bool levelOverlayStatic();
+
     // Screen-only overlays (hitboxes, trajectory)
     bool showHitboxes();
     bool showTrajectory();

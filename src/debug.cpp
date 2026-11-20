@@ -22,6 +22,8 @@ namespace layoutfeed::debug {
                 case Timer::Spout: return "spout";
                 case Timer::Layout: return "layout";
                 case Timer::Overlay: return "menus";
+                case Timer::LevelB: return "level-b";
+                case Timer::LevelBSim: return "level-b-sim";
                 default: return "?";
             }
         }

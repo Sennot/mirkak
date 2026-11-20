@@ -20,6 +20,8 @@ namespace layoutfeed::debug {
         Spout,
         Layout,
         Overlay,
+        LevelB,    // drawing level B (Level Overlay)
+        LevelBSim, // simulating level B
         Count,
     };
 

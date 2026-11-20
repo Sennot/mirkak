@@ -41,6 +41,12 @@ namespace layoutfeed::settings {
             ccColor3B groundColor{0, 102, 255};
             ccColor3B lineColor{255, 255, 255};
 
+            bool levelOverlayEnabled = false;
+            bool levelOverlayShown = true;
+            int levelOverlayLevelId = 0;
+            std::string levelOverlayLevelName;
+            bool levelOverlayStatic = false;
+
             bool showHitboxes = true;
             bool showTrajectory = true;
             bool highPerformanceTrajectory = true;
@@ -85,6 +91,14 @@ namespace layoutfeed::settings {
             value.backgroundColor = mod->getSettingValue<ccColor3B>("layout-background-color");
             value.groundColor = mod->getSettingValue<ccColor3B>("layout-ground-color");
             value.lineColor = mod->getSettingValue<ccColor3B>("layout-line-color");
+
+            value.levelOverlayEnabled = mod->getSettingValue<bool>("level-overlay-enabled");
+            value.levelOverlayShown = mod->getSettingValue<bool>("level-overlay-show");
+            value.levelOverlayLevelId = static_cast<int>(std::clamp(
+                mod->getSettingValue<int64_t>("level-overlay-level-id"), int64_t{0}, int64_t{999999999}
+            ));
+            value.levelOverlayLevelName = mod->getSettingValue<std::string>("level-overlay-level-name");
+            value.levelOverlayStatic = mod->getSettingValue<bool>("level-overlay-static");
 
             value.showHitboxes = mod->getSettingValue<bool>("show-hitboxes");
             value.showTrajectory = mod->getSettingValue<bool>("show-trajectory");
@@ -152,6 +166,12 @@ namespace layoutfeed::settings {
     ccColor3B groundColor() { return cache().groundColor; }
     ccColor3B lineColor() { return cache().lineColor; }
 
+    bool levelOverlayEnabled() { return cache().levelOverlayEnabled; }
+    bool levelOverlayShown() { return cache().levelOverlayShown; }
+    int levelOverlayLevelId() { return cache().levelOverlayLevelId; }
+    std::string const& levelOverlayLevelName() { return cache().levelOverlayLevelName; }
+    bool levelOverlayStatic() { return cache().levelOverlayStatic; }
+
     bool showHitboxes() { return cache().showHitboxes; }
     bool showTrajectory() { return cache().showTrajectory; }
     bool highPerformanceTrajectory() { return cache().highPerformanceTrajectory; }
@@ -175,12 +195,13 @@ namespace layoutfeed::settings {
         auto const& value = cache();
         log::info(
             "Settings: spout={} sender='{}' cursor={} menus={} steam={} | layout={} deco={} animDeco={} recolor={} opacity={} "
-            "blending={} glow={} particles={} effects={} mg={} shaders={} player={} | hitboxes={} trajectory={} tps={} length={} | debug={} interval={}s gpuTimers={}",
+            "blending={} glow={} particles={} effects={} mg={} shaders={} player={} | levelOverlay={} shown={} id={} name='{}' static={} | hitboxes={} trajectory={} tps={} length={} | debug={} interval={}s gpuTimers={}",
             value.enabled, value.senderName, value.captureCursor, value.captureMenus,
             value.captureSystemOverlays,
             value.layoutEnabled, value.hideDecoration, value.showAnimatedDecoration, value.recolorObjects, value.forceOpacity,
             value.normalBlending, value.hideGlow, value.hideParticles, value.hideEffects, value.hideMiddleground,
-            value.disableShaders, value.alwaysShowPlayer, value.showHitboxes, value.showTrajectory,
+            value.disableShaders, value.alwaysShowPlayer, value.levelOverlayEnabled, value.levelOverlayShown,
+            value.levelOverlayLevelId, value.levelOverlayLevelName, value.levelOverlayStatic, value.showHitboxes, value.showTrajectory,
             value.trajectoryTps, value.trajectoryLength, value.debugLogging, value.statsInterval, value.gpuTimers
         );
     }
