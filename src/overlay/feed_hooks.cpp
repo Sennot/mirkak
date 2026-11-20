@@ -19,6 +19,9 @@
 #include "physics/player.hpp"
 #include "trajectory/trajectory.hpp"
 
+#include <cstdint>
+#include <limits>
+
 using namespace geode::prelude;
 
 namespace layoutfeed {
@@ -49,27 +52,17 @@ namespace layoutfeed {
 
     class $modify(FeedPlayLayer, PlayLayer) {
         static void onModify(auto& self) {
-            constexpr auto hook = "PlayLayer::destroyPlayer";
-            (void)self.setHookPriority(hook, geode::Priority::FirstPre);
-
             // Fake prediction deaths must be consumed before noclip, death
             // counters and replay mods can mistake them for the real player.
-            for (auto const id : {
-                "absolllute.hackmega",
-                "absolllute.megahack",
-                "eclipse.eclipse-menu",
-                "elohmrow.death_tracker",
-                "zilko.xdbot"
-            }) {
-                if (auto* mod = Loader::get()->getInstalledMod(id)) {
-                    (void)self.setHookPriorityBeforePre(hook, mod);
-                }
-            }
+            // Mods that turn their own hook on and off (Mega Hack's noclip)
+            // are re-inserted by priority, so a relative order does not hold;
+            // only Level Overlay's guard for level B (INT32_MIN) runs earlier.
+            (void)self.setHookPriority("PlayLayer::destroyPlayer", std::numeric_limits<std::int32_t>::min() + 1);
         }
 
         bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
             if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
-            if (level_overlay::constructing()) return true;
+            if (level_overlay::inLevelB()) return true;
             setupForLayer(this);
             return true;
         }
@@ -80,8 +73,6 @@ namespace layoutfeed {
         }
 
         void destroyPlayer(PlayerObject* player, GameObject* object) override {
-            // Level B of the Level Overlay follows the real player and never dies.
-            if (level_overlay::isLevelB(this)) return;
             if (Trajectory::get().hasDied(player)) return;
             PlayLayer::destroyPlayer(player, object);
         }

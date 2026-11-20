@@ -4,33 +4,53 @@
 
 // Level Overlay: the player plays level A (the level that was opened) while
 // the monitor shows level B in its place. Level B is a second PlayLayer that
-// never enters the scene: it is created before level A, ticked right after
-// every update of level A with its players following level A's players, and
-// drawn by hand instead of the layout pass. OBS keeps receiving level A.
+// never enters the scene. It runs GD's own code only (isolation.cpp keeps
+// other mods out of it) and is driven by level A:
+//   - before every update of level A, level B's players take the exact state
+//     of level A's players (position, velocity, mode, held buttons);
+//   - every press and release of level A reaches level B's players at once,
+//     through GD's original pushButton/releaseButton;
+//   - after the update of level A, level B updates with the same time step,
+//     and its camera follows level A's player;
+//   - restarts, checkpoints and practice mode of level A are repeated on B.
+// It is drawn by hand instead of the layout pass; OBS keeps receiving level A.
 namespace layoutfeed::level_overlay {
-    // Level B's PlayLayer::init is running.
-    bool constructing();
-    // Code of level B is running (init, simulation, reset, draw). GameManager
-    // reports level B as the current PlayLayer meanwhile.
+    // GD code of level B is running (creation, update, reset, checkpoints,
+    // drawing). GameManager reports level B as the current level meanwhile.
     bool inLevelB();
 
     bool isLevelA(GJBaseGameLayer const* layer);
     bool isLevelB(GJBaseGameLayer const* layer);
+    bool owns(GJBaseGameLayer const* layer);
+    bool owns(PlayerObject const* player);
 
-    // Around level A's PlayLayer::init. Level B is created first, so mods that
-    // remember the PlayLayer from their own init hook end up with level A.
+    // The calls below are made from hooks that run right before GD's own
+    // code (priority INT32_MAX - 1). Calls into level B from there go straight
+    // to GD's original function, past every other hook (TulipHook continues a
+    // nested call of the same function at the next detour).
+
+    // Around level A's PlayLayer::init.
     void beforeLevelInit();
     void afterLevelInit(PlayLayer* levelA, bool success);
 
     // Around every update of level A.
+    PlayLayer* drivenBy(GJBaseGameLayer* layer);
     void beforeUpdate(PlayLayer* levelA);
     void afterUpdate(PlayLayer* levelA, float dt);
 
-    // Level A events mirrored to level B.
-    void onReset(PlayLayer* levelA);
-    void onCheckpointStored(PlayLayer* levelA);
-    void onCheckpointRemoved(PlayLayer* levelA, bool first);
-    void onPracticeToggled(PlayLayer* levelA);
+    // Level A events repeated on level B.
+    void afterStart(PlayLayer* levelA);
+    void afterReset(PlayLayer* levelA);
+    void afterCreateCheckpoint(PlayLayer* levelA, CheckpointObject* checkpoint);
+    void afterStoreCheckpoint(PlayLayer* levelA, CheckpointObject* checkpoint);
+    void afterRemoveCheckpoint(PlayLayer* levelA, bool first);
+    void afterRemoveAllCheckpoints(PlayLayer* levelA);
+    void afterPracticeToggle(PlayLayer* levelA);
+    void mirrorButton(PlayerObject* player, PlayerButton button, bool down);
+
+    // Inside level B's updateCamera: its players move to where level A's
+    // players are, so the camera follows the real player exactly.
+    void placeLevelBPlayers(GJBaseGameLayer* layer);
 
     void release(char const* reason);
 

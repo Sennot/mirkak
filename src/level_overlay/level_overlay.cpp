@@ -4,6 +4,7 @@
 #include "../overlay/player_overlay.hpp"
 #include "../overlay/render_pass.hpp"
 #include "../settings.hpp"
+#include "vanilla.hpp"
 
 #include <Geode/cocos/platform/win32/CCGL.h>
 
@@ -20,18 +21,22 @@ namespace layoutfeed::level_overlay {
         // Value of GJLevelType for created levels: PlayLayer then keeps no
         // online statistics for the private copy of level B.
         constexpr int kCreatedLevelType = 2;
-        constexpr std::size_t kMaxCheckpointRemovals = 4096;
+        constexpr std::size_t kMaxPendingCheckpoints = 64;
 
         Ref<PlayLayer> s_levelB;
         Ref<GJGameLevel> s_levelData;
         WeakRef<PlayLayer> s_levelA;
-        bool s_constructing = false;
         unsigned s_depth = 0;
-        unsigned s_pendingCheckpoints = 0;
+        // Chosen when level B is loaded; the setting applies from the next level.
+        bool s_static = false;
         bool s_started = false;
         bool s_loggedFirstDraw = false;
         std::uint64_t s_ticks = 0;
         std::uint64_t s_draws = 0;
+        std::uint64_t s_presses = 0;
+        // Checkpoints level A created and has not stored yet, with level B's
+        // checkpoint of the same moment.
+        std::vector<std::pair<CheckpointObject*, Ref<CheckpointObject>>> s_checkpoints;
 
         // Makes GameManager report level B while its code runs (GD and mods
         // look the current level up through it) and restores level A after.
@@ -132,123 +137,83 @@ namespace layoutfeed::level_overlay {
             }
         }
 
-        // Position, speed and mode of one player, captured from level A
-        // before its update so level B steps from the same state.
-        struct PlayerState {
-            bool valid = false;
-            CCPoint node;
-            CCPoint position;
-            float rotation = 0.f;
-            double yVelocity = 0.0;
-            float speed = 0.f;
-            bool onGround = false;
-            bool upsideDown = false;
-            bool mini = false;
-            bool goingLeft = false;
-            bool ship = false, bird = false, ball = false, dart = false;
-            bool robot = false, spider = false, swing = false;
-        };
-
-        std::array<PlayerState, 2> s_players{};
-
-        PlayerState capture(PlayerObject* player) {
-            PlayerState state;
-            if (!player) return state;
-            state.valid = true;
-            state.node = player->getPosition();
-            state.position = player->m_position;
-            state.rotation = player->getRotation();
-            state.yVelocity = player->m_yVelocity;
-            state.speed = player->m_playerSpeed;
-            state.onGround = player->m_isOnGround;
-            state.upsideDown = player->m_isUpsideDown;
-            state.mini = player->m_vehicleSize < 1.f;
-            state.goingLeft = player->m_isGoingLeft;
-            state.ship = player->m_isShip;
-            state.bird = player->m_isBird;
-            state.ball = player->m_isBall;
-            state.dart = player->m_isDart;
-            state.robot = player->m_isRobot;
-            state.spider = player->m_isSpider;
-            state.swing = player->m_isSwing;
-            return state;
-        }
-
-        // Switches level B's player to level A's game mode when level B did not
-        // (a portal missing in level B, or a teleport past it).
-        void applyMode(PlayerObject* player, PlayerState const& state) {
-            auto const same = player->m_isShip == state.ship && player->m_isBird == state.bird &&
-                player->m_isBall == state.ball && player->m_isDart == state.dart &&
-                player->m_isRobot == state.robot && player->m_isSpider == state.spider &&
-                player->m_isSwing == state.swing;
-            if (!same) {
-                if (player->m_isShip) player->toggleFlyMode(false, true);
-                if (player->m_isBird) player->toggleBirdMode(false, true);
-                if (player->m_isBall) player->toggleRollMode(false, true);
-                if (player->m_isDart) player->toggleDartMode(false, true);
-                if (player->m_isRobot) player->toggleRobotMode(false, true);
-                if (player->m_isSpider) player->toggleSpiderMode(false, true);
-                if (player->m_isSwing) player->toggleSwingMode(false, true);
-                if (state.ship) player->toggleFlyMode(true, true);
-                else if (state.bird) player->toggleBirdMode(true, true);
-                else if (state.ball) player->toggleRollMode(true, true);
-                else if (state.dart) player->toggleDartMode(true, true);
-                else if (state.robot) player->toggleRobotMode(true, true);
-                else if (state.spider) player->toggleSpiderMode(true, true);
-                else if (state.swing) player->toggleSwingMode(true, true);
-            }
-            if (player->m_isUpsideDown != state.upsideDown) player->flipGravity(state.upsideDown, true);
-            if ((player->m_vehicleSize < 1.f) != state.mini) player->togglePlayerScale(state.mini, true);
-        }
-
-        void apply(PlayerObject* player, PlayerState const& state) {
-            if (!player || !state.valid) return;
-            applyMode(player, state);
-            player->m_playerSpeed = state.speed;
-            player->m_isGoingLeft = state.goingLeft;
-            player->m_yVelocity = state.yVelocity;
-            player->m_isOnGround = state.onGround;
-            player->setPosition(state.node);
-            player->m_position = state.position;
-            player->setRotation(state.rotation);
-        }
-
-        bool holding(PlayerObject* player, PlayerButton button) {
-            auto const& buttons = player->m_holdingButtons;
-            auto const it = buttons.find(static_cast<int>(button));
-            return it != buttons.end() && it->second;
-        }
-
-        // Level B gets the held buttons of level A. Its own orbs, pads and
-        // touch triggers then react as they would for the real player.
-        void mirrorButtons(PlayerObject* from, PlayerObject* to) {
-            if (!from || !to) return;
-            for (auto const button : {PlayerButton::Jump, PlayerButton::Left, PlayerButton::Right}) {
-                auto const down = holding(from, button);
-                if (down == holding(to, button)) continue;
-                if (down) to->pushButton(button);
-                else to->releaseButton(button);
-            }
-        }
-
         bool dualBoth(PlayLayer* levelA, PlayLayer* levelB) {
             return levelA->m_gameState.m_isDualMode && levelB->m_gameState.m_isDualMode;
         }
 
-        void clearCheckpoints(PlayLayer* levelB) {
-            for (std::size_t i = 0; i < kMaxCheckpointRemovals; ++i) {
-                auto* checkpoints = levelB->m_checkpointArray;
-                if (!checkpoints || !checkpoints->count()) break;
-                auto const before = checkpoints->count();
-                levelB->removeCheckpoint(false);
-                if (checkpoints->count() >= before) break;
-            }
-            s_pendingCheckpoints = 0;
+        bool hasCheckpoints(PlayLayer* layer) {
+            return layer->m_checkpointArray && layer->m_checkpointArray->count();
         }
 
-        void mirrorPractice(PlayLayer* levelA, PlayLayer* levelB) {
-            levelB->m_isPracticeMode = levelA->m_isPracticeMode;
-            if (!levelA->m_isPracticeMode) clearCheckpoints(levelB);
+        // Game mode, gravity and size through GD's own switches (isolation.cpp
+        // sends them straight to GD), only when level B did not switch itself.
+        void matchMode(PlayerObject* from, PlayerObject* to) {
+            auto const same = to->m_isShip == from->m_isShip && to->m_isBird == from->m_isBird &&
+                to->m_isBall == from->m_isBall && to->m_isDart == from->m_isDart &&
+                to->m_isRobot == from->m_isRobot && to->m_isSpider == from->m_isSpider &&
+                to->m_isSwing == from->m_isSwing;
+            if (!same) {
+                if (to->m_isShip) to->toggleFlyMode(false, true);
+                if (to->m_isBird) to->toggleBirdMode(false, true);
+                if (to->m_isBall) to->toggleRollMode(false, true);
+                if (to->m_isDart) to->toggleDartMode(false, true);
+                if (to->m_isRobot) to->toggleRobotMode(false, true);
+                if (to->m_isSpider) to->toggleSpiderMode(false, true);
+                if (to->m_isSwing) to->toggleSwingMode(false, true);
+                if (from->m_isShip) to->toggleFlyMode(true, true);
+                else if (from->m_isBird) to->toggleBirdMode(true, true);
+                else if (from->m_isBall) to->toggleRollMode(true, true);
+                else if (from->m_isDart) to->toggleDartMode(true, true);
+                else if (from->m_isRobot) to->toggleRobotMode(true, true);
+                else if (from->m_isSpider) to->toggleSpiderMode(true, true);
+                else if (from->m_isSwing) to->toggleSwingMode(true, true);
+            }
+            if (to->m_isUpsideDown != from->m_isUpsideDown) to->flipGravity(from->m_isUpsideDown, true);
+            auto const mini = from->m_vehicleSize < 1.f;
+            if ((to->m_vehicleSize < 1.f) != mini) to->togglePlayerScale(mini, true);
+        }
+
+        void place(PlayerObject* from, PlayerObject* to) {
+            if (!from || !to) return;
+            to->setPosition(from->getPosition());
+            to->m_position = from->m_position;
+        }
+
+        // The state level A's player starts this update with: level B's
+        // player then takes the same physics step through level B. Object
+        // references (ground, slopes, rings, dash orbs) stay level B's own.
+        void copyPlayer(PlayerObject* from, PlayerObject* to) {
+            if (!from || !to) return;
+            matchMode(from, to);
+            place(from, to);
+            to->setRotation(from->getRotation());
+            to->m_yVelocity = from->m_yVelocity;
+            to->m_fallSpeed = from->m_fallSpeed;
+            to->m_platformerXVelocity = from->m_platformerXVelocity;
+            to->m_isOnGround = from->m_isOnGround;
+            to->m_isOnGround2 = from->m_isOnGround2;
+            to->m_isOnGround3 = from->m_isOnGround3;
+            to->m_isOnGround4 = from->m_isOnGround4;
+            to->m_stateOnGround = from->m_stateOnGround;
+            to->m_lastGroundedPos = from->m_lastGroundedPos;
+            to->m_isGoingLeft = from->m_isGoingLeft;
+            to->m_playerSpeed = from->m_playerSpeed;
+            to->m_gravityMod = from->m_gravityMod;
+            to->m_totalTime = from->m_totalTime;
+            to->m_lastJumpTime = from->m_lastJumpTime;
+            to->m_lastFlipTime = from->m_lastFlipTime;
+            to->m_lastLandTime = from->m_lastLandTime;
+            // Held buttons are normally equal already (presses are mirrored);
+            // this catches anything that changed them without a press.
+            if (to->m_holdingButtons != from->m_holdingButtons) to->m_holdingButtons = from->m_holdingButtons;
+            to->m_holdingLeft = from->m_holdingLeft;
+            to->m_holdingRight = from->m_holdingRight;
+            to->m_leftPressedFirst = from->m_leftPressedFirst;
+        }
+
+        void copyPlayers(PlayLayer* levelA, PlayLayer* levelB) {
+            copyPlayer(levelA->m_player1, levelB->m_player1);
+            if (dualBoth(levelA, levelB)) copyPlayer(levelA->m_player2, levelB->m_player2);
         }
 
         void copyTransform(CCNode* from, CCNode* to) {
@@ -299,8 +264,8 @@ namespace layoutfeed::level_overlay {
             b.m_cameraAngle = a.m_cameraAngle;
             b.m_targetCameraAngle = a.m_targetCameraAngle;
 
-            apply(levelB->m_player1, capture(levelA->m_player1));
-            if (dualBoth(levelA, levelB)) apply(levelB->m_player2, capture(levelA->m_player2));
+            place(levelA->m_player1, levelB->m_player1);
+            if (dualBoth(levelA, levelB)) place(levelA->m_player2, levelB->m_player2);
 
             levelB->updateVisibility(dt);
 
@@ -461,10 +426,6 @@ namespace layoutfeed::level_overlay {
         }
     }
 
-    bool constructing() {
-        return s_constructing;
-    }
-
     bool inLevelB() {
         return s_depth != 0;
     }
@@ -477,6 +438,15 @@ namespace layoutfeed::level_overlay {
 
     bool isLevelB(GJBaseGameLayer const* layer) {
         return layer && s_levelB && static_cast<GJBaseGameLayer const*>(s_levelB.data()) == layer;
+    }
+
+    bool owns(GJBaseGameLayer const* layer) {
+        return isLevelB(layer);
+    }
+
+    bool owns(PlayerObject const* player) {
+        auto* levelB = s_levelB.data();
+        return player && levelB && (player == levelB->m_player1 || player == levelB->m_player2);
     }
 
     void beforeLevelInit() {
@@ -492,12 +462,12 @@ namespace layoutfeed::level_overlay {
         if (!data) return;
         auto const name = std::string(source->m_levelName);
 
+        // Called from level A's innermost init hook: level B's init runs GD's
+        // code only, and everything it calls is kept from other mods.
         PlayLayer* levelB = nullptr;
         {
             LevelBScope scope(nullptr);
-            s_constructing = true;
             levelB = PlayLayer::create(data, false, false);
-            s_constructing = false;
         }
         if (!levelB) {
             notify("level B '" + name + "' failed to load");
@@ -505,8 +475,9 @@ namespace layoutfeed::level_overlay {
         }
         s_levelB = levelB;
         s_levelData = data;
-        log::info("Level Overlay: level B '{}' loaded ({})", name,
-                  settings::levelOverlayStatic() ? "static objects" : "full simulation");
+        s_static = settings::levelOverlayStatic();
+        log::info("Level Overlay: level B '{}' loaded ({})", name, s_static ? "static objects" : "full simulation");
+        vanilla::logSummary();
     }
 
     void afterLevelInit(PlayLayer* levelA, bool success) {
@@ -516,17 +487,23 @@ namespace layoutfeed::level_overlay {
             return;
         }
         s_levelA = levelA;
-        s_pendingCheckpoints = 0;
+        s_checkpoints.clear();
         s_started = false;
         s_loggedFirstDraw = false;
         s_ticks = 0;
         s_draws = 0;
-        s_players = {};
+        s_presses = 0;
+    }
+
+    PlayLayer* drivenBy(GJBaseGameLayer* layer) {
+        return isLevelA(layer) ? static_cast<PlayLayer*>(layer) : nullptr;
     }
 
     void beforeUpdate(PlayLayer* levelA) {
-        s_players[0] = capture(levelA->m_player1);
-        s_players[1] = levelA->m_gameState.m_isDualMode ? capture(levelA->m_player2) : PlayerState{};
+        auto* levelB = s_levelB.data();
+        if (!levelB || s_static || !s_started || levelA->m_isPaused) return;
+        LevelBScope scope(levelB);
+        copyPlayers(levelA, levelB);
     }
 
     void afterUpdate(PlayLayer* levelA, float dt) {
@@ -542,80 +519,146 @@ namespace layoutfeed::level_overlay {
         debug::CpuScope cpu(debug::Timer::LevelBSim);
         LevelBScope scope(levelB);
 
-        if (settings::levelOverlayStatic()) {
+        if (s_static) {
             followStatically(levelA, levelB, dt);
             ++s_ticks;
             return;
         }
 
         if (!s_started) {
+            // Level A started without going through its startGame hook.
             if (!levelA->m_started) return;
             s_started = true;
             if (!levelB->m_started) levelB->startGame();
-            LF_DEBUG("Level Overlay: level B started with level A");
+            copyPlayers(levelA, levelB);
+            LF_DEBUG("Level Overlay: level B started late, with level A's first update");
         }
 
-        apply(levelB->m_player1, s_players[0]);
-        mirrorButtons(levelA->m_player1, levelB->m_player1);
-        if (dualBoth(levelA, levelB)) {
-            apply(levelB->m_player2, s_players[1]);
-            mirrorButtons(levelA->m_player2, levelB->m_player2);
-        }
-
+        // Nested call of the hooked function: GD's own update for level B.
         levelB->update(dt);
-
-        // Level A stored a checkpoint during its update; level B stores its
-        // own now that it reached the same moment.
-        for (; s_pendingCheckpoints; --s_pendingCheckpoints) {
-            if (auto* checkpoint = levelB->createCheckpoint()) levelB->storeCheckpoint(checkpoint);
-        }
         ++s_ticks;
     }
 
-    void onReset(PlayLayer* levelA) {
+    void afterStart(PlayLayer* levelA) {
         auto* levelB = s_levelB.data();
-        if (!levelB || settings::levelOverlayStatic() || !s_started) return;
+        if (!levelB || s_static || s_started) return;
         LevelBScope scope(levelB);
-        mirrorPractice(levelA, levelB);
-        s_pendingCheckpoints = 0;
+        s_started = true;
+        if (!levelB->m_started) levelB->startGame();
+        copyPlayers(levelA, levelB);
+        LF_DEBUG("Level Overlay: level B started with level A");
+    }
+
+    void afterReset(PlayLayer* levelA) {
+        auto* levelB = s_levelB.data();
+        if (!levelB || s_static || !s_started) return;
+        LevelBScope scope(levelB);
+        levelB->m_isPracticeMode = levelA->m_isPracticeMode;
+        s_checkpoints.clear();
+        // Leaving practice mode: level A restarts from the beginning, so must B.
+        if (!levelA->m_isPracticeMode && !levelA->m_isPlatformer && !hasCheckpoints(levelA) &&
+            hasCheckpoints(levelB)) {
+            levelB->removeAllCheckpoints();
+        }
+        // Nested call of the hooked function: GD's own reset for level B.
         levelB->resetLevel();
-        apply(levelB->m_player1, capture(levelA->m_player1));
-        if (dualBoth(levelA, levelB)) apply(levelB->m_player2, capture(levelA->m_player2));
-        LF_DEBUG("Level Overlay: level B reset with level A (practice {}, {} checkpoints)",
+        copyPlayers(levelA, levelB);
+        LF_DEBUG("Level Overlay: level B reset with level A (practice {}, {} / {} checkpoints)",
                  levelA->m_isPracticeMode,
+                 levelA->m_checkpointArray ? levelA->m_checkpointArray->count() : 0u,
                  levelB->m_checkpointArray ? levelB->m_checkpointArray->count() : 0u);
     }
 
-    void onCheckpointStored(PlayLayer* levelA) {
+    void afterCreateCheckpoint(PlayLayer*, CheckpointObject* checkpoint) {
         auto* levelB = s_levelB.data();
-        if (!levelB || settings::levelOverlayStatic()) return;
-        levelB->m_isPracticeMode = levelA->m_isPracticeMode;
-        ++s_pendingCheckpoints;
+        if (!levelB || s_static || !s_started || !checkpoint) return;
+        LevelBScope scope(levelB);
+        // Level B is one update behind level A at this point, so both
+        // checkpoints are within a frame of each other.
+        if (auto* mirrored = levelB->createCheckpoint()) {
+            if (s_checkpoints.size() >= kMaxPendingCheckpoints) s_checkpoints.erase(s_checkpoints.begin());
+            s_checkpoints.emplace_back(checkpoint, mirrored);
+        }
     }
 
-    void onCheckpointRemoved(PlayLayer*, bool first) {
+    void afterStoreCheckpoint(PlayLayer*, CheckpointObject* checkpoint) {
         auto* levelB = s_levelB.data();
-        if (!levelB || settings::levelOverlayStatic()) return;
-        if (s_pendingCheckpoints && !first) {
-            --s_pendingCheckpoints;
-            return;
-        }
-        auto* checkpoints = levelB->m_checkpointArray;
-        if (!checkpoints || !checkpoints->count()) return;
+        if (!levelB || s_static) return;
+        auto const it = std::find_if(s_checkpoints.begin(), s_checkpoints.end(), [&](auto const& pair) {
+            return pair.first == checkpoint;
+        });
+        if (it == s_checkpoints.end()) return;
+        Ref<CheckpointObject> const mirrored = it->second;
+        s_checkpoints.erase(it);
+        LevelBScope scope(levelB);
+        levelB->storeCheckpoint(mirrored.data());
+    }
+
+    void afterRemoveCheckpoint(PlayLayer*, bool first) {
+        auto* levelB = s_levelB.data();
+        if (!levelB || s_static || !hasCheckpoints(levelB)) return;
         LevelBScope scope(levelB);
         levelB->removeCheckpoint(first);
     }
 
-    void onPracticeToggled(PlayLayer* levelA) {
+    void afterRemoveAllCheckpoints(PlayLayer*) {
         auto* levelB = s_levelB.data();
-        if (!levelB) return;
+        if (!levelB || s_static) return;
+        s_checkpoints.clear();
+        if (!hasCheckpoints(levelB)) return;
         LevelBScope scope(levelB);
-        mirrorPractice(levelA, levelB);
+        levelB->removeAllCheckpoints();
+    }
+
+    // GD's togglePracticeMode restarts the music, so level B only takes the
+    // flag; its checkpoints go when level A's go.
+    void afterPracticeToggle(PlayLayer* levelA) {
+        auto* levelB = s_levelB.data();
+        if (!levelB || s_static) return;
+        LevelBScope scope(levelB);
+        levelB->m_isPracticeMode = levelA->m_isPracticeMode;
+        if (!levelA->m_isPracticeMode && !levelA->m_isPlatformer && !hasCheckpoints(levelA) &&
+            hasCheckpoints(levelB)) {
+            levelB->removeAllCheckpoints();
+        }
+    }
+
+    void mirrorButton(PlayerObject* player, PlayerButton button, bool down) {
+        auto* levelB = s_levelB.data();
+        if (!levelB || s_static || !s_started) return;
+        auto const index = static_cast<int>(button);
+        if (index < 1 || index > 3) return; // "both directions" releases arrive as 2 and 3
+        auto levelA = s_levelA.lock();
+        if (!levelA) return;
+        PlayerObject* target = nullptr;
+        if (player == levelA->m_player1) target = levelB->m_player1;
+        else if (player == levelA->m_player2) target = levelB->m_player2;
+        if (!target) return;
+
+        LevelBScope scope(levelB);
+        // Nested call of the hooked function: GD's own press for level B.
+        if (down) {
+            target->pushButton(button);
+            ++s_presses;
+        } else {
+            target->releaseButton(button);
+        }
+    }
+
+    void placeLevelBPlayers(GJBaseGameLayer* layer) {
+        auto* levelB = s_levelB.data();
+        if (!levelB || s_static || static_cast<GJBaseGameLayer*>(levelB) != layer) return;
+        auto levelA = s_levelA.lock();
+        if (!levelA) return;
+        place(levelA->m_player1, levelB->m_player1);
+        if (dualBoth(levelA.data(), levelB)) place(levelA->m_player2, levelB->m_player2);
     }
 
     void release(char const* reason) {
         if (!s_levelB) return;
-        LF_DEBUG("Level Overlay: releasing level B ({}) after {} updates and {} frames", reason, s_ticks, s_draws);
+        LF_DEBUG("Level Overlay: releasing level B ({}) after {} updates, {} frames and {} mirrored presses",
+                 reason, s_ticks, s_draws, s_presses);
+        s_checkpoints.clear();
         {
             // The destructor may clear GameManager's level pointers.
             LevelBScope scope(s_levelB.data());
@@ -623,9 +666,7 @@ namespace layoutfeed::level_overlay {
         }
         s_levelData = nullptr;
         s_levelA = nullptr;
-        s_pendingCheckpoints = 0;
         s_started = false;
-        s_players = {};
     }
 
     bool shouldRender() {
@@ -706,7 +747,7 @@ namespace layoutfeed::level_overlay {
             log::info(
                 "Level Overlay active: level B drawn on screen ({}), {} player nodes of level A on top, "
                 "shader layer {}",
-                settings::levelOverlayStatic() ? "static objects" : "simulated",
+                s_static ? "static objects" : "simulated",
                 players.size(), levelB->m_shaderLayer ? "present" : "absent"
             );
         }

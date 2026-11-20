@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.3.0
+- Level B is invisible to other mods. Its simulation no longer adds deaths to noclip accuracy, doubles
+  CPS counters, shows Mega Hack's noclip tint (the color change on a section), or reaches bots and
+  death trackers. While level B runs, about 80 GD functions that Mega Hack, xdBot, CPS counters and
+  death trackers hook go straight to GD's original code; deaths, inputs, jumps, statistics, pausing,
+  audio and the end of the level never happen for level B at all.
+- Much closer full simulation:
+  - before every update, level B's players take the exact state of level A's players (position,
+    velocity, ground state, speed, gravity, mode, size, held buttons, timers);
+  - every press and release reaches level B's players at the moment GD applies it to level A, through
+    GD's own pushButton/releaseButton (orbs, pads and touch triggers of level B react to them);
+  - level B's camera follows exactly where level A's player is;
+  - restart, practice checkpoints (including auto checkpoints), removing checkpoints and leaving
+    practice are repeated on level B; level B's own checkpoint objects stay passive.
+- Level B is created with GD's original PlayLayer::init (no other mod's init hook sees it).
+- Trajectory: predicted deaths are consumed before Mega Hack's noclip even after it re-enables its
+  hook (fixed priority instead of an order relative to other mods).
+
 ## v2.2.0
 - Level Overlay: you play level A (the level you open) while your screen shows level B in its place,
   fully drawn with its objects, colors, background and shaders. OBS still receives level A.

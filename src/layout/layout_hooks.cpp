@@ -190,7 +190,7 @@ namespace layoutfeed {
     class $modify(LayoutPlayLayer, PlayLayer) {
         bool init(GJGameLevel* level, bool useReplay, bool dontCreateObjects) {
             // Level B of the Level Overlay is drawn as it is, not in Layout Mode.
-            if (level_overlay::constructing()) return PlayLayer::init(level, useReplay, dontCreateObjects);
+            if (level_overlay::inLevelB()) return PlayLayer::init(level, useReplay, dontCreateObjects);
             // Objects are created inside init, so start collecting first.
             pass::onLevelEnter(this);
             if (!PlayLayer::init(level, useReplay, dontCreateObjects)) return false;
