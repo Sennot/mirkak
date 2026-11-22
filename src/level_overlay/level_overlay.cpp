@@ -518,6 +518,27 @@ namespace layoutfeed::level_overlay {
             }
         }
 
+        // Every visible node that is not a level object, as it will be drawn
+        // (hidden parents stop the walk), with its path from the root.
+        void scanVisible(CCNode* node, std::string const& path, int depth, int& budget) {
+            if (!node || !node->isVisible() || budget <= 0 || depth > 12) return;
+            if (typeinfo_cast<GameObject*>(node)) return;
+            auto const name = className(node);
+            auto const here = path.empty() ? name : path + " > " + name;
+            auto const leafLike = typeinfo_cast<CCSprite*>(node) || typeinfo_cast<CCParticleSystem*>(node) ||
+                typeinfo_cast<CCMotionStreak*>(node) || typeinfo_cast<CCLabelProtocol*>(node);
+            if (leafLike && !typeinfo_cast<CCSpriteBatchNode*>(node)) {
+                auto const world = node->convertToWorldSpace({0.f, 0.f});
+                GLubyte opacity = 255;
+                if (auto* rgba = typeinfo_cast<CCRGBAProtocol*>(node)) opacity = rgba->getOpacity();
+                log::info("[overlay scan] {} {} opacity={} world=({:.0f},{:.0f}) id='{}'", here, fmt::ptr(node),
+                          opacity, world.x, world.y, std::string_view(node->getID()));
+                --budget;
+            }
+            if (!node->getChildren()) return;
+            for (auto* child : CCArrayExt<CCNode*>(node->getChildren())) scanVisible(child, here, depth + 1, budget);
+        }
+
         void dumpAll(PlayLayer* levelA, PlayLayer* levelB, std::vector<CCNode*> const& drawn) {
             log::info("[overlay dump] ===== Level Overlay dump =====");
             dumpPlayer(levelA->m_player1, "level A player 1");
@@ -529,6 +550,22 @@ namespace layoutfeed::level_overlay {
             log::info("[overlay dump] --- nodes of level A drawn over level B: {}", drawn.size());
             for (auto* node : drawn) {
                 dumpNode(node, 0, 0, drawnByGame(node, levelA) ? "[drawn] " : "[skipped] ");
+            }
+            int budget = 300;
+            log::info("[overlay scan] --- drawn nodes of level A");
+            for (auto* node : drawn) {
+                if (drawnByGame(node, levelA)) scanVisible(node, "A", 0, budget);
+            }
+            if (auto* scene = CCDirector::sharedDirector()->getRunningScene(); scene && scene->getChildren()) {
+                log::info("[overlay scan] --- scene layers above level A");
+                auto above = false;
+                for (auto* child : CCArrayExt<CCNode*>(scene->getChildren())) {
+                    if (child == levelA) {
+                        above = true;
+                        continue;
+                    }
+                    if (above) scanVisible(child, "scene", 0, budget);
+                }
             }
             log::info("[overlay dump] ===== end =====");
         }
@@ -844,6 +881,11 @@ namespace layoutfeed::level_overlay {
         {
             HiddenNodes hidden;
             hideLevelBExtras(levelB, hidden);
+            if (s_dumpRequested) {
+                int budget = 400;
+                log::info("[overlay scan] ===== level B as drawn (level objects left out) =====");
+                scanVisible(levelB, "B", 0, budget);
+            }
             LevelBScope scope(levelB);
             levelB->visit();
         }
