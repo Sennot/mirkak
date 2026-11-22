@@ -1,5 +1,11 @@
 # Changelog
 
+## v2.3.5
+- Fixed: icons of earlier game modes staying on screen in level B. A mod adds a SimplePlayer icon to
+  the current PlayLayer on mode switches; while level B's code runs that is level B, and the mod only
+  removes its icon from level A. SimplePlayer nodes inside level B are hidden.
+- The F8 dump (v2.3.3/v2.3.4) found it: it lists every visible non-object node of level B as drawn.
+
 ## v2.3.3
 - Debug: the "Dump objects on screen" keybind (F8) also logs every player node of level A and
   level B with the Level Overlay on (class, visibility, opacity, position), and which of level A's

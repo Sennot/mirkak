@@ -381,7 +381,7 @@ namespace layoutfeed::level_overlay {
                 for (auto* child : CCArrayExt<CCNode*>(layer->getChildren())) {
                     if (typeinfo_cast<PlayerObject*>(child) || typeinfo_cast<CCMotionStreak*>(child) ||
                         typeinfo_cast<HardStreak*>(child) || typeinfo_cast<GJRobotSprite*>(child) ||
-                        typeinfo_cast<GJSpiderSprite*>(child)) {
+                        typeinfo_cast<GJSpiderSprite*>(child) || typeinfo_cast<SimplePlayer*>(child)) {
                         hidden.hide(child);
                     }
                 }
@@ -393,7 +393,10 @@ namespace layoutfeed::level_overlay {
                 for (auto* child : CCArrayExt<CCNode*>(children)) {
                     if (!child) continue;
                     auto const id = std::string_view(child->getID());
-                    if (typeinfo_cast<CCLabelProtocol*>(child) || id.find('/') != std::string_view::npos) {
+                    // SimplePlayer: icons some mods add to the current PlayLayer
+                    // (level B while its code runs) and only remove from level A.
+                    if (typeinfo_cast<CCLabelProtocol*>(child) || typeinfo_cast<SimplePlayer*>(child) ||
+                        id.find('/') != std::string_view::npos) {
                         hidden.hide(child);
                     }
                 }
