@@ -13,6 +13,7 @@
 #include <cctype>
 #include <string>
 #include <string_view>
+#include <typeinfo>
 #include <vector>
 
 using namespace geode::prelude;
@@ -40,6 +41,7 @@ namespace layoutfeed::level_overlay {
         std::vector<std::pair<CheckpointObject*, Ref<CheckpointObject>>> s_checkpoints;
         // Children of level B that were entered (made running) by hand.
         std::vector<Ref<CCNode>> s_runningNodes;
+        bool s_dumpRequested = false;
 
         // Makes GameManager report level B while its code runs (GD and mods
         // look the current level up through it) and restores level A after.
@@ -470,6 +472,67 @@ namespace layoutfeed::level_overlay {
         // What level A shows of its real players (not the trajectory's
         // hidden simulation players): icons, trails, particles, and the
         // death and orb effects GD adds next to them in the object layer.
+        std::string className(CCNode* node) {
+            std::string name = typeid(*node).name();
+            for (auto const prefix : {"class ", "struct "}) {
+                if (name.rfind(prefix, 0) == 0) name.erase(0, std::char_traits<char>::length(prefix));
+            }
+            return name;
+        }
+
+        void dumpNode(CCNode* node, int depth, int maxDepth, std::string const& label) {
+            if (!node) return;
+            auto const world = node->convertToWorldSpace({0.f, 0.f});
+            GLubyte opacity = 255;
+            if (auto* rgba = typeinfo_cast<CCRGBAProtocol*>(node)) opacity = rgba->getOpacity();
+            log::info(
+                "[overlay dump] {}{}{} {} visible={} running={} opacity={} z={} world=({:.0f},{:.0f}) scale=({:.2f},{:.2f}) children={}",
+                std::string(static_cast<std::size_t>(depth) * 2, ' '), label, className(node),
+                fmt::ptr(node), node->isVisible(), node->isRunning(), opacity, node->getZOrder(), world.x, world.y,
+                node->getScaleX(), node->getScaleY(), node->getChildrenCount()
+            );
+            if (depth >= maxDepth || !node->getChildren()) return;
+            for (auto* child : CCArrayExt<CCNode*>(node->getChildren())) dumpNode(child, depth + 1, maxDepth, "");
+        }
+
+        void dumpPlayer(PlayerObject* player, char const* label) {
+            if (!player) return;
+            log::info("[overlay dump] --- {} (ship {} ufo {} ball {} wave {} robot {} spider {} swing {} dead {})",
+                      label, player->m_isShip, player->m_isBird, player->m_isBall, player->m_isDart, player->m_isRobot,
+                      player->m_isSpider, player->m_isSwing, player->m_isDead);
+            dumpNode(player, 0, 6, "");
+            dumpNode(player->m_robotBatchNode, 1, 3, "robotBatch ");
+            dumpNode(player->m_spiderBatchNode, 1, 3, "spiderBatch ");
+            dumpNode(player->m_regularTrail, 1, 1, "regularTrail ");
+            dumpNode(player->m_waveTrail, 1, 1, "waveTrail ");
+            dumpNode(player->m_ghostTrail, 1, 2, "ghostTrail ");
+        }
+
+        // Children of an object layer that are not level batches.
+        void dumpLayerExtras(CCNode* layer, char const* label) {
+            if (!layer || !layer->getChildren()) return;
+            log::info("[overlay dump] --- {} object layer extras", label);
+            for (auto* child : CCArrayExt<CCNode*>(layer->getChildren())) {
+                if (!child || typeinfo_cast<CCSpriteBatchNode*>(child)) continue;
+                dumpNode(child, 0, 2, "");
+            }
+        }
+
+        void dumpAll(PlayLayer* levelA, PlayLayer* levelB, std::vector<CCNode*> const& drawn) {
+            log::info("[overlay dump] ===== Level Overlay dump =====");
+            dumpPlayer(levelA->m_player1, "level A player 1");
+            dumpPlayer(levelA->m_player2, "level A player 2");
+            dumpPlayer(levelB->m_player1, "level B player 1");
+            dumpPlayer(levelB->m_player2, "level B player 2");
+            dumpLayerExtras(levelA->m_objectLayer, "level A");
+            dumpLayerExtras(levelB->m_objectLayer, "level B");
+            log::info("[overlay dump] --- nodes of level A drawn over level B: {}", drawn.size());
+            for (auto* node : drawn) {
+                dumpNode(node, 0, 0, drawnByGame(node, levelA) ? "[drawn] " : "[skipped] ");
+            }
+            log::info("[overlay dump] ===== end =====");
+        }
+
         std::vector<CCNode*> playerNodes(PlayLayer* levelA) {
             std::vector<CCNode*> nodes;
             auto const add = [&](CCNode* node) {
@@ -755,6 +818,10 @@ namespace layoutfeed::level_overlay {
         return levelA->isRunning() && levelA->getParent() && CCDirector::sharedDirector()->getRunningScene();
     }
 
+    void requestDump() {
+        if (s_levelB) s_dumpRequested = true;
+    }
+
     void render() {
         auto levelA = s_levelA.lock();
         auto* levelB = s_levelB.data();
@@ -783,6 +850,10 @@ namespace layoutfeed::level_overlay {
 
         auto const map = buildMap(levelA.data(), levelB);
         auto const players = playerNodes(levelA.data());
+        if (s_dumpRequested) {
+            s_dumpRequested = false;
+            dumpAll(levelA.data(), levelB, players);
+        }
         for (auto* node : players) visitFromLevelA(node, levelA.data(), map);
 
         // Hitboxes and trajectory of level A (it is the level being played).

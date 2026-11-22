@@ -1,5 +1,10 @@
 # Changelog
 
+## v2.3.3
+- Debug: the "Dump objects on screen" keybind (F8) also logs every player node of level A and
+  level B with the Level Overlay on (class, visibility, opacity, position), and which of level A's
+  nodes are drawn over level B.
+
 ## v2.3.2
 - Fixed: mode icons, spider dash lines and particles piling up in level B. Level B never enters the
   scene, so its actions and scheduled updates were paused: particles froze and every effect GD fades

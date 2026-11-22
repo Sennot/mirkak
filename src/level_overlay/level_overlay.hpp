@@ -62,4 +62,8 @@ namespace layoutfeed::level_overlay {
     // hitboxes, trajectory, interface and the layers above the level (pause
     // menu, end screen, popups). Replaces the layout pass for that frame.
     void render();
+
+    // Logs every player node of level A and level B on the next drawn frame
+    // (debug dump keybind).
+    void requestDump();
 }

@@ -173,7 +173,9 @@ $on_game(Loaded) {
     listenForKeybindSettingPresses(
         "debug-dump-keybind",
         [](Keybind const&, bool down, bool repeat, double) {
-            if (down && !repeat) layoutfeed::hidden::requestDump();
+            if (!down || repeat) return;
+            layoutfeed::hidden::requestDump();
+            layoutfeed::level_overlay::requestDump();
         }
     );
 }
