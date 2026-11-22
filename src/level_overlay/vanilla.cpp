@@ -146,19 +146,23 @@ namespace layoutfeed::vanilla {
                 return reject("last detour is not a trampoline");
             }
 
-            // The trampoline begins with the function's own first instruction.
+            // The last entry is either the relocated prologue of the function
+            // or, for GD's calling conventions, TulipHook's wrapper around it
+            // (push rbp; ...; call relocated). Both are what the last detour
+            // calls as "original", with the same arguments. Only logged.
+            char const* kind = "wrapper";
             std::uintptr_t moduleBase = 0;
             if (auto const image = diskImageFor(target, moduleBase)) {
                 std::array<std::uint8_t, 2> onDisk{};
-                std::array<std::uint8_t, 2> relocated{};
-                if (!readMemory(image + (target - moduleBase), onDisk.data(), onDisk.size()) ||
-                    !readMemory(trampoline, relocated.data(), relocated.size()) || onDisk != relocated) {
-                    return reject("trampoline does not start like the function");
+                std::array<std::uint8_t, 2> start{};
+                if (readMemory(image + (target - moduleBase), onDisk.data(), onDisk.size()) &&
+                    readMemory(trampoline, start.data(), start.size()) && onDisk == start) {
+                    kind = "relocated prologue";
                 }
             }
 
             ++s_resolved;
-            LF_DEBUG("Level Overlay: direct call for {} at {:#x}", name, trampoline);
+            LF_DEBUG("Level Overlay: direct call for {} at {:#x} ({})", name, trampoline, kind);
             return reinterpret_cast<void*>(trampoline);
         }
     }

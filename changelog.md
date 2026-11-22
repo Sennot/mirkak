@@ -1,5 +1,16 @@
 # Changelog
 
+## v2.3.1
+- Fixed: the isolation of level B was not active in v2.3.0. Every direct call was refused because
+  TulipHook calls GD's code through a small wrapper, not the relocated prologue the check expected,
+  so Mega Hack still saw level B (thousands of noclip deaths while touching a spike: level B's
+  frames reset its per-frame death flag). The wrapper is now accepted; the handler and module checks
+  stay.
+- Fixed: icons of other game modes and labels staying on screen in level B. Only level A's real
+  players are drawn on top of level B (not the trajectory's simulation players), and only parts GD
+  itself would draw (every parent visible). Player-like nodes and labels that GD or mods put into
+  level B are hidden.
+
 ## v2.3.0
 - Level B is invisible to other mods. Its simulation no longer adds deaths to noclip accuracy, doubles
   CPS counters, shows Mega Hack's noclip tint (the color change on a section), or reaches bots and

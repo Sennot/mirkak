@@ -334,6 +334,39 @@ namespace layoutfeed::level_overlay {
             hidden.hide(levelB->m_attemptLabel);
             hidden.hide(levelB->m_infoLabel);
             hidden.hide(levelB->m_statusLabel);
+
+            // Anything player-like GD or a mod put straight into level B's
+            // object layers (trails, robot and spider sprites, extra players).
+            for (auto* layer : {levelB->m_objectLayer, levelB->m_inShaderObjectLayer, levelB->m_aboveShaderObjectLayer}) {
+                if (!layer || !layer->getChildren()) continue;
+                for (auto* child : CCArrayExt<CCNode*>(layer->getChildren())) {
+                    if (typeinfo_cast<PlayerObject*>(child) || typeinfo_cast<CCMotionStreak*>(child) ||
+                        typeinfo_cast<HardStreak*>(child) || typeinfo_cast<GJRobotSprite*>(child) ||
+                        typeinfo_cast<GJSpiderSprite*>(child)) {
+                        hidden.hide(child);
+                    }
+                }
+            }
+
+            // Labels and other nodes mods attach to the level itself; level
+            // A's own are drawn on top instead.
+            if (auto* children = levelB->getChildren()) {
+                for (auto* child : CCArrayExt<CCNode*>(children)) {
+                    if (!child) continue;
+                    auto const id = child->getID();
+                    if (typeinfo_cast<CCLabelProtocol*>(child) || id.find('/') != std::string::npos) {
+                        hidden.hide(child);
+                    }
+                }
+            }
+        }
+
+        // GD draws a node only when it and every parent are visible.
+        bool drawnByGame(CCNode* node, CCNode* root) {
+            for (auto* up = node; up && up != root; up = up->getParent()) {
+                if (!up->isVisible()) return false;
+            }
+            return true;
         }
 
         kmMat4 toMatrix(CCAffineTransform const& t) {
@@ -372,7 +405,7 @@ namespace layoutfeed::level_overlay {
         // Visits a node of level A where it belongs: in level B's world when
         // it lives in a level layer, at its own screen place otherwise.
         void visitFromLevelA(CCNode* node, PlayLayer* levelA, LayerMap const& map) {
-            if (!node || !node->isVisible()) return;
+            if (!node || !drawnByGame(node, levelA)) return;
             auto* parent = node->getParent();
             if (!parent) return;
             auto transform = parent->nodeToWorldTransform();
@@ -397,7 +430,8 @@ namespace layoutfeed::level_overlay {
             return false;
         }
 
-        // What level A shows of the player: icons, trails, particles, and the
+        // What level A shows of its real players (not the trajectory's
+        // hidden simulation players): icons, trails, particles, and the
         // death and orb effects GD adds next to them in the object layer.
         std::vector<CCNode*> playerNodes(PlayLayer* levelA) {
             std::vector<CCNode*> nodes;
@@ -406,9 +440,7 @@ namespace layoutfeed::level_overlay {
             };
             if (auto* layer = levelA->m_objectLayer; layer && layer->getChildren()) {
                 for (auto* child : CCArrayExt<CCNode*>(layer->getChildren())) {
-                    if (typeinfo_cast<PlayerObject*>(child) || typeinfo_cast<CCMotionStreak*>(child) ||
-                        typeinfo_cast<HardStreak*>(child) || typeinfo_cast<CCCircleWave*>(child) ||
-                        typeinfo_cast<ExplodeItemNode*>(child)) {
+                    if (typeinfo_cast<CCCircleWave*>(child) || typeinfo_cast<ExplodeItemNode*>(child)) {
                         add(child);
                     }
                 }
