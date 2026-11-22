@@ -12,6 +12,7 @@
 #include <array>
 #include <cctype>
 #include <string>
+#include <string_view>
 #include <vector>
 
 using namespace geode::prelude;
@@ -353,8 +354,8 @@ namespace layoutfeed::level_overlay {
             if (auto* children = levelB->getChildren()) {
                 for (auto* child : CCArrayExt<CCNode*>(children)) {
                     if (!child) continue;
-                    auto const id = child->getID();
-                    if (typeinfo_cast<CCLabelProtocol*>(child) || id.find('/') != std::string::npos) {
+                    auto const id = std::string_view(child->getID());
+                    if (typeinfo_cast<CCLabelProtocol*>(child) || id.find('/') != std::string_view::npos) {
                         hidden.hide(child);
                     }
                 }
