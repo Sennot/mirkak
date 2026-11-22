@@ -1,5 +1,12 @@
 # Changelog
 
+## v2.3.2
+- Fixed: mode icons, spider dash lines and particles piling up in level B. Level B never enters the
+  scene, so its actions and scheduled updates were paused: particles froze and every effect GD fades
+  out or removes with an action stayed on screen. The game part of level B now runs like a normal
+  level (its interface and touch layers stay out, so it takes no input) and is stopped cleanly before
+  level B is released. Animated objects and particle objects of level B move as well.
+
 ## v2.3.1
 - Fixed: the isolation of level B was not active in v2.3.0. Every direct call was refused because
   TulipHook calls GD's code through a small wrapper, not the relocated prologue the check expected,

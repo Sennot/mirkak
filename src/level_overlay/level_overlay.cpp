@@ -38,6 +38,8 @@ namespace layoutfeed::level_overlay {
         // Checkpoints level A created and has not stored yet, with level B's
         // checkpoint of the same moment.
         std::vector<std::pair<CheckpointObject*, Ref<CheckpointObject>>> s_checkpoints;
+        // Children of level B that were entered (made running) by hand.
+        std::vector<Ref<CCNode>> s_runningNodes;
 
         // Makes GameManager report level B while its code runs (GD and mods
         // look the current level up through it) and restores level A after.
@@ -136,6 +138,40 @@ namespace layoutfeed::level_overlay {
             if (auto* notification = Notification::create("Level Overlay: " + text, NotificationIcon::Warning)) {
                 notification->show();
             }
+        }
+
+        // Level B never enters the scene, so its nodes were never "running":
+        // their actions and scheduled updates stayed paused. Particles froze,
+        // and every effect GD fades out or removes with an action (spider dash
+        // lines, mode switch icons, death and orb effects) stayed forever.
+        // The game part of level B is entered by hand. Its interface and any
+        // touch-enabled layer or menu stay out, so level B never takes input,
+        // and level B itself stays out, so its update is not scheduled twice.
+        void enterGameNodes(PlayLayer* levelB) {
+            auto* children = levelB->getChildren();
+            if (!children) return;
+            std::vector<CCNode*> nodes;
+            for (auto* child : CCArrayExt<CCNode*>(children)) nodes.push_back(child);
+            for (auto* child : nodes) {
+                if (!child || child->isRunning() || child == levelB->m_uiLayer) continue;
+                if (typeinfo_cast<CCMenu*>(child)) continue;
+                if (auto* layer = typeinfo_cast<CCLayer*>(child); layer && layer->isTouchEnabled()) continue;
+                if (std::string_view(child->getID()).find('/') != std::string_view::npos) continue;
+                child->onEnter();
+                s_runningNodes.emplace_back(child);
+            }
+            LF_DEBUG("Level Overlay: {} game nodes of level B are running", s_runningNodes.size());
+        }
+
+        // Stops what enterGameNodes started before level B is destroyed, so no
+        // action or scheduled update points into freed nodes.
+        void exitGameNodes() {
+            for (auto it = s_runningNodes.rbegin(); it != s_runningNodes.rend(); ++it) {
+                if (!*it) continue;
+                if ((*it)->isRunning()) (*it)->onExit();
+                (*it)->cleanup();
+            }
+            s_runningNodes.clear();
         }
 
         bool dualBoth(PlayLayer* levelA, PlayLayer* levelB) {
@@ -509,6 +545,10 @@ namespace layoutfeed::level_overlay {
         s_levelB = levelB;
         s_levelData = data;
         s_static = settings::levelOverlayStatic();
+        {
+            LevelBScope scope(levelB);
+            enterGameNodes(levelB);
+        }
         log::info("Level Overlay: level B '{}' loaded ({})", name, s_static ? "static objects" : "full simulation");
         vanilla::logSummary();
     }
@@ -695,6 +735,7 @@ namespace layoutfeed::level_overlay {
         {
             // The destructor may clear GameManager's level pointers.
             LevelBScope scope(s_levelB.data());
+            exitGameNodes();
             s_levelB = nullptr;
         }
         s_levelData = nullptr;
